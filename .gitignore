@@ -1,0 +1,21 @@
+node_modules/
+out/
+dist/
+# electron-builder output (deb/rpm + unpacked app)
+release/
+*.log
+.DS_Store
+
+# Temporary files emitted by electron-vite / pnpm tooling
+electron.vite.config.*.mjs
+_tmp_*
+
+# electron-builder reads these post-install/post-remove scripts at package
+# time, so they must stay trackable even if a broad `build/` rule is added.
+!build/
+!build/after-install.tpl
+!build/after-remove.tpl
+
+# The repository root ignores `docs/`; this app keeps its own architecture
+# notes, so re-include the directory for this subtree.
+!docs/

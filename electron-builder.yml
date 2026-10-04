@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2024 PlebOne
+#
+# electron-builder configuration for the autonex Electron app.
+appId: com.autonex
+productName: AutoNex
+executableName: autonex
+artifactName: autonex-${version}-${arch}.${ext}
+copyright: Copyright © 2024 PlebOne
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+
+# The polkit policy and the root-owned privileged helper it binds. Shipped in
+# the package's resources; the post-install script installs them to
+# /usr/share/polkit-1/actions/org.autonex.policy and
+# /usr/lib/autonex/autonex-helper (see build/after-install.tpl).
+extraResources:
+  - from: resources/org.autonex.policy
+    to: org.autonex.policy
+  - from: resources/autonex-helper
+    to: autonex-helper
+
+linux:
+  # deb and rpm only, for parity with the original Flutter packaging scripts.
+  target:
+    - deb
+    - rpm
+  # Root autonex.desktop lists `Categories=Utility;PackageManager;`.
+  category: Utility;PackageManager
+  icon: build/icon.png
+  synopsis: GitHub-release package manager for Linux
+  description: AutoNex helps you manage and install applications from GitHub releases.
+  maintainer: AutoNex Team <team@autonex.dev>
+  desktop:
+    entry:
+      Keywords: package;github;release;manager;
+      StartupWMClass: com.autonex
+
+# Carried over from scripts/create-debian-package.sh.
+deb:
+  depends:
+    - libgtk-3-0
+    - libblkid1
+    - liblzma5
+    - libcurl4
+    - libfreetype6
+  # Install the polkit policy and the root-owned helper, and refresh the
+  # desktop/icon caches; remove both on uninstall. See build/*.tpl.
+  afterInstall: build/after-install.tpl
+  afterRemove: build/after-remove.tpl
+
+# Mirrors the Requires list in scripts/create-rpm-package.sh.
+rpm:
+  depends:
+    - libgtk-3-0
+    - libblkid1
+    - liblzma5
+    - libcurl4
+    - libfreetype6
+  # Same polkit policy install/removal as the deb package.
+  afterInstall: build/after-install.tpl
+  afterRemove: build/after-remove.tpl

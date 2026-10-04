@@ -1,0 +1,10 @@
+# pnpm 11 reads project settings from this file.
+#
+# This is a single-package project, NOT a monorepo; the file exists only to
+# review the dependency build scripts that pnpm is allowed to execute.
+# `electron` must build so its binary is downloaded during `pnpm install`.
+allowBuilds:
+  electron: true
+  esbuild: true
+  # Windows-only packaging helper pulled in transitively by electron-builder.
+  electron-winstaller: false

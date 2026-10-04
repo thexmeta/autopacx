@@ -1,0 +1,150 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2024 PlebOne
+#
+# AutoNex privileged helper.
+#
+# This is the ONLY program bound to the `org.autonex.helper` polkit action
+# (see resources/org.autonex.policy), so `pkexec` can never be turned into a
+# generic root shell: every privileged step the app takes is an argv array
+# `pkexec /usr/lib/autonex/autonex-helper <verb> <args...>`.
+#
+# Design rules, mirroring src/main/services/privileged-helper.ts:
+#   * A strict verb protocol; an unknown verb exits 2.
+#   * Every path argument is canonicalised with `readlink -f` and required to be
+#     under a fixed allowlist, so `..`, symlinks and sibling-prefix tricks can
+#     never escape the app's own directories.
+#   * Package names must match ^[A-Za-z0-9][A-Za-z0-9+._-]*$.
+#   * No `eval`; no unvalidated value is ever interpolated into a command.
+#
+# It is installed root:root 0755 at /usr/lib/autonex/autonex-helper by the
+# package post-install script. Running it as a non-root user is meaningless but
+# harmless: the underlying commands will simply fail.
+
+set -eu
+
+fail() {
+    echo "autonex-helper: $1" >&2
+    exit 2
+}
+
+[ "$#" -ge 1 ] || fail "usage: autonex-helper <verb> [args...]"
+verb="$1"
+shift
+
+# --- Caller identity --------------------------------------------------------
+#
+# pkexec sanitises the environment but always sets PKEXEC_UID to the uid of the
+# invoking process. Resolve that user's home so the app's per-user directories
+# can be validated even though the caller's XDG_DATA_HOME is not available here.
+caller_uid="${PKEXEC_UID:-0}"
+caller_home="$(/usr/bin/getent passwd "$caller_uid" 2>/dev/null | /usr/bin/cut -d: -f6)" || true
+[ -n "$caller_home" ] || caller_home="/root"
+
+# Canonicalise a path, falling back to the literal value when the path (or its
+# parent) does not exist yet — which is the normal case for a destination that
+# is about to be created.
+canon() {
+    _resolved="$(/usr/bin/readlink -f -- "$1" 2>/dev/null)" || true
+    if [ -n "$_resolved" ]; then
+        printf '%s\n' "$_resolved"
+    else
+        printf '%s\n' "$1"
+    fi
+}
+
+# Whether $2 is exactly $1 or a child of $1.
+under() {
+    case "$2" in
+        "$1" | "$1"/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Whether $1 is under any of the remaining roots.
+under_any() {
+    _cand="$1"
+    shift
+    for _root in "$@"; do
+        [ -n "$_root" ] || continue
+        if under "$_root" "$_cand"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Package name grammar: ^[A-Za-z0-9][A-Za-z0-9+._-]*$.
+valid_package() {
+    case "$1" in
+        '' | [!A-Za-z0-9]* | *[!A-Za-z0-9+._-]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+APP_DATA="$caller_home/.local/share/autonex"
+DOWNLOAD_ROOTS="$(canon "$APP_DATA/downloads") $(canon "$APP_DATA/staging")"
+INSTALL_ROOTS="/usr/local/bin /usr/bin /bin /usr/local/lib /usr/lib /usr/share /opt $(canon "$caller_home/.local/bin") $(canon "$caller_home/.local/lib")"
+
+case "$verb" in
+apt-install)
+    [ "$#" -eq 1 ] || fail "apt-install expects exactly one path"
+    p="$(canon "$1")"
+    under_any "$p" $DOWNLOAD_ROOTS || fail "apt-install path is outside the downloads directory"
+    [ -f "$p" ] || fail "apt-install path is not a regular file"
+    exec /usr/bin/apt-get install -y -- "$p"
+    ;;
+
+rpm-install)
+    [ "$#" -eq 1 ] || fail "rpm-install expects exactly one path"
+    p="$(canon "$1")"
+    under_any "$p" $DOWNLOAD_ROOTS || fail "rpm-install path is outside the downloads directory"
+    [ -f "$p" ] || fail "rpm-install path is not a regular file"
+    exec /usr/bin/rpm -i -- "$p"
+    ;;
+
+dpkg-remove)
+    [ "$#" -eq 1 ] || fail "dpkg-remove expects exactly one package name"
+    valid_package "$1" || fail "invalid package name"
+    exec /usr/bin/dpkg -r "$1"
+    ;;
+
+rpm-remove)
+    [ "$#" -eq 1 ] || fail "rpm-remove expects exactly one package name"
+    valid_package "$1" || fail "invalid package name"
+    exec /usr/bin/rpm -e "$1"
+    ;;
+
+atomic-install)
+    [ "$#" -eq 2 ] || fail "atomic-install expects <src> <dest>"
+    src="$(canon "$1")"
+    dest="$(canon "$2")"
+    under_any "$src" $DOWNLOAD_ROOTS || fail "atomic-install source is outside the staging directory"
+    under_any "$dest" $INSTALL_ROOTS || fail "atomic-install destination is outside the allowed install directories"
+    [ -f "$src" ] || fail "atomic-install source is not a regular file"
+    [ ! -d "$dest" ] || fail "atomic-install destination is a directory"
+    # `install` alone is not atomic (it unlinks the destination); `mv` within
+    # the same directory is an atomic rename(2), so the target is either the old
+    # binary or the new one, never absent or half-written.
+    /usr/bin/install -m 755 -- "$src" "$dest.autonex-new" && /usr/bin/mv -f -- "$dest.autonex-new" "$dest"
+    ;;
+
+backup)
+    [ "$#" -eq 1 ] || fail "backup expects exactly one path"
+    p="$(canon "$1")"
+    under_any "$p" $INSTALL_ROOTS || fail "backup path is outside the allowed install directories"
+    [ -f "$p" ] || exit 0
+    /usr/bin/cp -p -- "$p" "$p.bak"
+    ;;
+
+cleanup)
+    [ "$#" -eq 1 ] || fail "cleanup expects exactly one path"
+    p="$(canon "$1")"
+    under_any "$p" $DOWNLOAD_ROOTS || fail "cleanup path is outside the staging directory"
+    /usr/bin/rm -f -- "$p"
+    ;;
+
+*)
+    fail "unknown verb: $verb"
+    ;;
+esac

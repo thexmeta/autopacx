@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2024 PlebOne
+
+  polkit action for autonex's privileged helper.
+
+  AutoNex never runs a shell string: every privileged step is an argv array
+  launched through `pkexec` (see src/main/services/installer-service.ts). This
+  policy binds the single polkit action to the ONE root-owned helper program
+  (`/usr/lib/autonex/autonex-helper`), which validates a strict verb
+  protocol and the paths it is given. Because no generic interpreter
+  (`sh`, `cp`, `rm`) or package manager (`apt-get`, `dpkg`, `rpm`) is bound
+  here, `pkexec` cannot be turned into a generic root shell.
+
+  `auth_admin` (NOT `auth_admin_keep`) is used deliberately: authentication is
+  required for every privileged operation and is never cached, so a later
+  `pkexec` call cannot silently reuse an earlier approval.
+
+  Install this file to /usr/share/polkit-1/actions/org.autonex.policy.
+  A graphical authentication agent (polkit-gnome, polkit-kde-agent, or the one
+  shipped by the desktop) must be running for the GUI prompts to appear.
+-->
+<policyconfig>
+
+  <vendor>AutoNex</vendor>
+  <vendor_url>https://github.com/thexmeta/autonex</vendor_url>
+
+  <action id="org.autonex.helper">
+    <description>Run the AutoNex privileged helper</description>
+    <message>Authentication is required to install or remove a package with AutoNex</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/autonex/autonex-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+
+</policyconfig>

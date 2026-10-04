@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Content-Security-Policy fallback.
+
+      The main process also sets a CSP response header (src/main/security.ts),
+      but packaged builds load the renderer from file:// where there is no HTTP
+      response to attach a header to, so this meta tag is the guaranteed policy.
+      It is the dev-safe variant: `script-src` keeps `'unsafe-inline'` and
+      `'unsafe-eval'` and `connect-src` keeps `ws:` so the Vite dev server and
+      its HMR websocket work. In a packaged build the stricter session header
+      (script-src 'self'; connect-src 'self') is also applied, and the two
+      policies are intersected, so production is stricter than this fallback.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ws: http: https:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
+    />
+    <title>AutoNex</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
