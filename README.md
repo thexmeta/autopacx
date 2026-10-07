@@ -8,7 +8,7 @@
 
 ![Add-app dialog](screenshots/03-add-app-dialog.png)
 
-![Tracked apps in the light theme](screenshots/04-apps-light.png)
+![Settings sheet](screenshots/04-settings.png)
 
 A GitHub-release package manager for Linux. Desktop application built with
 Electron, React 19 and TypeScript.
