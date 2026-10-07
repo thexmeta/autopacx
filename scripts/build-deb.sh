@@ -74,7 +74,7 @@ fi
 
 if [ "$build_unpacked" -eq 1 ]; then
     log "Packaging unpacked Electron tree (electron-builder --linux dir)…"
-    pnpm exec electron-builder --linux dir
+    pnpm exec electron-builder --linux dir --publish never
 else
     log "Unpacked tree is up to date: $UNPACKED"
 fi

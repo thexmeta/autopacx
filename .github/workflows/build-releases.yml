@@ -26,15 +26,15 @@ jobs:
             pattern: '*.tar.gz'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: 'pnpm'
@@ -57,13 +57,16 @@ jobs:
               ;;
             rpm)
               pnpm build
-              pnpm exec electron-builder --linux rpm
+              # --publish never: on a tag electron-builder would otherwise
+              # implicitly try to publish to GitHub and demand GH_TOKEN. The
+              # release is published by softprops/action-gh-release instead.
+              pnpm exec electron-builder --linux rpm --publish never
               mkdir -p dist
               cp release/*.rpm dist/
               ;;
             linux-x64)
               pnpm build
-              pnpm exec electron-builder --linux dir
+              pnpm exec electron-builder --linux dir --publish never
               VERSION=$(node -p "require('./package.json').version")
               mkdir -p dist/linux-x64
               tar -czf "dist/linux-x64/autopacx-${VERSION}-linux-x64.tar.gz" \
@@ -73,7 +76,7 @@ jobs:
           ls -lh dist/
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.format }}-package
           path: dist/**/${{ matrix.pattern }}
@@ -102,7 +105,7 @@ jobs:
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "tag '$tag' -> prerelease=$prerelease"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
@@ -116,7 +119,7 @@ jobs:
           ls -lh release-files/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           files: release-files/*
           draft: false
