@@ -11,7 +11,7 @@ import {
 import { useGithubReleaseAssets } from '@renderer/src/hooks/use-github-release-assets'
 import { Badge, Button, Dialog, EmptyState, Spinner } from './ui'
 
-/** The sentinel value for the "let AutoNex choose" option. */
+/** The sentinel value for the "let AutoPacX choose" option. */
 const AUTO = ''
 
 /** Formats a byte count as a compact human string. */
@@ -129,7 +129,7 @@ export function GithubAssetDialog({
     body = (
       <EmptyState
         title="No downloadable packages"
-        description={`${displayName} has no release asset AutoNex can install.`}
+        description={`${displayName} has no release asset AutoPacX can install.`}
       />
     )
   } else {
@@ -147,7 +147,7 @@ export function GithubAssetDialog({
           <span className="min-w-0">
             <span className="block text-sm text-text-strong">Auto (best match)</span>
             <span className="block text-xs text-muted">
-              Let AutoNex choose the best asset for this system.
+              Let AutoPacX choose the best asset for this system.
             </span>
           </span>
         </label>

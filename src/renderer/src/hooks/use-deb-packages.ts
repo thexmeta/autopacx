@@ -17,6 +17,6 @@ export function rehydrateDebPackages(wire: readonly TrackedDebPackageWire[]): Tr
 export function useDebPackages(): UseQueryResult<TrackedDebPackage[], Error> {
   return useQuery({
     queryKey: ['debPackages'],
-    queryFn: async () => rehydrateDebPackages(await window.autonex.getDebPackages())
+    queryFn: async () => rehydrateDebPackages(await window.autopacx.getDebPackages())
   })
 }

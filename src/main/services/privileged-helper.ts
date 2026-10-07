@@ -6,8 +6,8 @@ import { posix } from 'node:path'
 /**
  * The strict contract of the root-owned privileged helper.
  *
- * The helper (`resources/autonex-helper`, installed to
- * {@link AUTONEX_HELPER_PATH} by the package post-install script) is the
+ * The helper (`resources/autopacx-helper`, installed to
+ * {@link AUTOPACX_HELPER_PATH} by the package post-install script) is the
  * ONLY program bound to the polkit action, so `pkexec` can never be turned into
  * a generic root shell. It accepts a small verb protocol and validates every
  * argument before touching a privileged command.
@@ -19,7 +19,7 @@ import { posix } from 'node:path'
  */
 
 /** Where the post-install script places the helper. */
-export const AUTONEX_HELPER_PATH = '/usr/lib/autonex/autonex-helper'
+export const AUTOPACX_HELPER_PATH = '/usr/lib/autopacx/autopacx-helper'
 
 /** The verbs the helper understands. Anything else is exit code 2. */
 export const HELPER_VERBS = [

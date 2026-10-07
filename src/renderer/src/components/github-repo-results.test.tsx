@@ -75,7 +75,7 @@ describe('GithubRepoResults', () => {
       .fn()
       .mockRejectedValue(
         new Error(
-          "Error invoking remote method 'autonex:searchGithubRepositories': Error: " +
+          "Error invoking remote method 'autopacx:searchGithubRepositories': Error: " +
             'GitHub search rate limit exceeded (status 403, reset 1767225600, retry-after 60)'
         )
       )

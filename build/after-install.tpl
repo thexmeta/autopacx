@@ -1,5 +1,5 @@
 #!/bin/bash
-# AutoNex Debian/RPM post-install script.
+# AutoPacX Debian/RPM post-install script.
 #
 # Passed to fpm as --after-install by electron-builder. It mirrors the default
 # electron-builder template (binary symlink, chrome-sandbox permissions,
@@ -40,8 +40,8 @@ fi
 # Install the polkit policy so pkexec maps the app's privileged actions to a
 # named, user-readable prompt instead of the generic
 # org.freedesktop.policykit.exec.
-POLICY_SOURCE='/opt/${sanitizedProductName}/resources/org.autonex.policy'
-POLICY_TARGET='/usr/share/polkit-1/actions/org.autonex.policy'
+POLICY_SOURCE='/opt/${sanitizedProductName}/resources/org.autopacx.policy'
+POLICY_TARGET='/usr/share/polkit-1/actions/org.autopacx.policy'
 if [ -f "$POLICY_SOURCE" ]; then
     mkdir -p /usr/share/polkit-1/actions
     cp -f "$POLICY_SOURCE" "$POLICY_TARGET" || true
@@ -51,10 +51,10 @@ fi
 # Install the root-owned privileged helper. The polkit policy above binds the
 # single action to this one program, so pkexec can never run a generic shell.
 # It must be root:root 0755, otherwise pkexec refuses to run it.
-HELPER_SOURCE='/opt/${sanitizedProductName}/resources/autonex-helper'
-HELPER_TARGET='/usr/lib/autonex/autonex-helper'
+HELPER_SOURCE='/opt/${sanitizedProductName}/resources/autopacx-helper'
+HELPER_TARGET='/usr/lib/autopacx/autopacx-helper'
 if [ -f "$HELPER_SOURCE" ]; then
-    mkdir -p /usr/lib/autonex
+    mkdir -p /usr/lib/autopacx
     install -m 0755 -o root -g root "$HELPER_SOURCE" "$HELPER_TARGET" || \
         { cp -f "$HELPER_SOURCE" "$HELPER_TARGET" && chmod 0755 "$HELPER_TARGET" && chown root:root "$HELPER_TARGET"; } || true
 fi

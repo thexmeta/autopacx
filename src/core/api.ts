@@ -98,7 +98,7 @@ export interface MaskedSettings {
 }
 
 /** Every channel is namespaced so a handler can never be mistaken for another. */
-export const IPC_CHANNEL_PREFIX = 'autonex:'
+export const IPC_CHANNEL_PREFIX = 'autopacx:'
 
 /**
  * The architecture types the add-app picker offers by default. Ports the Dart
@@ -110,9 +110,9 @@ export const DEFAULT_ARCH_TYPES = ['amd64', 'arm64', 'x86_64', 'arm', 'armhf', '
 /**
  * The single push channel used for long-running operation progress. The main
  * process emits {@link IpcEvent} values; the preload bridge forwards them to
- * the renderer through {@link AutonexApi.onEvent}.
+ * the renderer through {@link AutopacxApi.onEvent}.
  */
-export const IPC_EVENT_CHANNEL = 'autonex:event'
+export const IPC_EVENT_CHANNEL = 'autopacx:event'
 
 /** Progress for a running batch operation. */
 export interface BatchProgressEvent {
@@ -196,7 +196,7 @@ export interface GithubReleaseAssetsWire {
   readonly totalAssets?: number
 }
 
-/** Input for {@link AutonexApi.getGithubReleaseAssets}. */
+/** Input for {@link AutopacxApi.getGithubReleaseAssets}. */
 export interface GetGithubReleaseAssetsInput {
   readonly repoOwner: string
   readonly repoName: string
@@ -232,7 +232,7 @@ export interface PacstallIndexWire {
 /** Sort keys the repository-search UI may request; `best-match` is the default. */
 export type GitHubRepoSearchSort = 'stars' | 'updated' | 'best-match'
 
-/** Input for {@link AutonexApi.searchGithubRepositories}. */
+/** Input for {@link AutopacxApi.searchGithubRepositories}. */
 export interface SearchGithubRepositoriesInput {
   readonly query: string
   readonly page?: number
@@ -240,7 +240,7 @@ export interface SearchGithubRepositoriesInput {
   readonly sort?: GitHubRepoSearchSort
 }
 
-/** Input for {@link AutonexApi.addPacstallPackage}. */
+/** Input for {@link AutopacxApi.addPacstallPackage}. */
 export interface AddPacstallPackageInput {
   readonly name: string
   readonly displayName?: string | null
@@ -279,7 +279,7 @@ export interface InstallTargetSuggestionWire {
   readonly recommended: boolean
 }
 
-/** Input for {@link AutonexApi.getInstallTargets}. */
+/** Input for {@link AutopacxApi.getInstallTargets}. */
 export interface GetInstallTargetsInput {
   /** The app / package name used to derive app-specific locations. */
   readonly name: string
@@ -287,14 +287,14 @@ export interface GetInstallTargetsInput {
   readonly installType?: string | null
 }
 
-/** Result of {@link AutonexApi.getInstallTargets}. */
+/** Result of {@link AutopacxApi.getInstallTargets}. */
 export interface InstallTargetsResultWire {
   readonly candidates: InstallTargetSuggestionWire[]
   /** The recommended candidate's path, or `null` when none is writable. */
   readonly defaultPath: string | null
 }
 
-/** Input for {@link AutonexApi.addApp}, mirroring `DatabaseService.addApp`. */
+/** Input for {@link AutopacxApi.addApp}, mirroring `DatabaseService.addApp`. */
 export interface AddAppInput {
   readonly repoOwner: string
   readonly repoName: string
@@ -309,7 +309,7 @@ export interface AddAppInput {
   readonly installType?: string | null
 }
 
-/** Input for {@link AutonexApi.addDebPackage}. */
+/** Input for {@link AutopacxApi.addDebPackage}. */
 export interface AddDebPackageInput {
   readonly name: string
   readonly packageUrl: string
@@ -347,18 +347,18 @@ export interface BatchUpdateResult {
   readonly failures: BatchUpdateFailure[]
 }
 
-/** Tally returned by {@link AutonexApi.batchDelete}. */
+/** Tally returned by {@link AutopacxApi.batchDelete}. */
 export interface BatchDeleteSummary {
   readonly succeeded: number
   readonly failed: number
 }
 
-/** Result of {@link AutonexApi.exportData}. */
+/** Result of {@link AutopacxApi.exportData}. */
 export interface ExportResult {
   readonly path: string
 }
 
-/** Result of {@link AutonexApi.importData}. */
+/** Result of {@link AutopacxApi.importData}. */
 export interface ImportResult {
   readonly count: number
 }
@@ -382,7 +382,7 @@ export interface DebugLogResult {
  * operations and are all gated by the `trusted(event)` sender check in the
  * main process.
  */
-export interface AutonexApi {
+export interface AutopacxApi {
   readonly version: string
   getApps(): Promise<TrackedAppWire[]>
   getDebPackages(): Promise<TrackedDebPackageWire[]>
@@ -499,7 +499,7 @@ export interface AutonexApi {
  *
  * Adding a name here without a matching handler fails typecheck (the handler
  * map in `src/main/ipc-handlers.ts` is a total record over `IpcMethod`), and
- * adding a method to `AutonexApi` without implementing it fails typecheck
+ * adding a method to `AutopacxApi` without implementing it fails typecheck
  * in the preload bridge.
  */
 export const IPC_METHODS = [

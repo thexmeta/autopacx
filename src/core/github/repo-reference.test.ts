@@ -99,7 +99,7 @@ describe('formatRepoReference', () => {
   })
 
   it('round-trips through parseRepoReference', () => {
-    const formatted = formatRepoReference('thexmeta', 'autonex')
-    expect(parseRepoReference(formatted)).toEqual({ owner: 'thexmeta', name: 'autonex' })
+    const formatted = formatRepoReference('thexmeta', 'autopacx')
+    expect(parseRepoReference(formatted)).toEqual({ owner: 'thexmeta', name: 'autopacx' })
   })
 })

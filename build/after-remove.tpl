@@ -1,5 +1,5 @@
 #!/bin/bash
-# AutoNex Debian/RPM post-remove script.
+# AutoPacX Debian/RPM post-remove script.
 #
 # Passed to fpm as --after-remove by electron-builder. It mirrors the default
 # electron-builder template (binary symlink removal, AppArmor profile removal)
@@ -19,9 +19,9 @@ else
 fi
 
 # Remove the installed polkit policy and the root-owned privileged helper.
-rm -f /usr/share/polkit-1/actions/org.autonex.policy || true
-rm -f /usr/lib/autonex/autonex-helper || true
-rmdir /usr/lib/autonex 2>/dev/null || true
+rm -f /usr/share/polkit-1/actions/org.autopacx.policy || true
+rm -f /usr/lib/autopacx/autopacx-helper || true
+rmdir /usr/lib/autopacx 2>/dev/null || true
 
 # Refresh the desktop/icon caches so the removal is reflected.
 if hash update-desktop-database 2>/dev/null; then

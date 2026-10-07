@@ -98,7 +98,7 @@ const resultSchemas: { readonly [K in IpcMethod]: z.ZodType } = {
  * handler validates its own arguments against its Zod request schema and the
  * result is validated against the method's result schema before it crosses back
  * to the renderer. Long-running batch operations push typed progress events on
- * `autonex:event`.
+ * `autopacx:event`.
  *
  * Registration is idempotent: each channel is removed before it is re-added, so
  * calling this once per window (the macOS `activate` path recreates the window)

@@ -40,7 +40,7 @@ describe('PacstallRegistry', () => {
   let dir: string
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'autonex-registry-'))
+    dir = await mkdtemp(join(tmpdir(), 'autopacx-registry-'))
   })
 
   afterEach(async () => {

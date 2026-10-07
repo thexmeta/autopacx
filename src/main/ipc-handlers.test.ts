@@ -872,8 +872,8 @@ describe('deb CRUD', () => {
 describe('data handlers', () => {
   it('exportData returns the path from the config service', async () => {
     const h = makeHarness()
-    vi.mocked(h.config.exportConfig).mockResolvedValue('/data/autonex-export.json')
-    expect(await h.handlers.exportData([])).toEqual({ path: '/data/autonex-export.json' })
+    vi.mocked(h.config.exportConfig).mockResolvedValue('/data/autopacx-export.json')
+    expect(await h.handlers.exportData([])).toEqual({ path: '/data/autopacx-export.json' })
   })
 
   it('importData returns the imported count', async () => {

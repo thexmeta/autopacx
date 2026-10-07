@@ -56,7 +56,7 @@ function createWindow(deps: IpcRegistrationDeps): void {
 }
 
 void app.whenReady().then(async () => {
-  app.setAppUserModelId('com.autonex')
+  app.setAppUserModelId('com.autopacx')
 
   // Import the Flutter app's databases on first run before anything reads them.
   const store = new JsonStore(app.getPath('userData'))

@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  AUTONEX_HELPER_PATH,
+  AUTOPACX_HELPER_PATH,
   defaultDownloadRoots,
   defaultInstallRoots,
   isUnderRoot,
@@ -13,11 +13,11 @@ import type { HelperPathPolicy } from './privileged-helper'
 
 /**
  * The pure specification of the root-owned helper's validation, mirrored
- * one-for-one by `resources/autonex-helper`. These tests pin the rules that
+ * one-for-one by `resources/autopacx-helper`. These tests pin the rules that
  * keep `pkexec <helper> ...` from being usable as a generic root command.
  */
 
-const APP_SUPPORT = '/home/u/.local/share/autonex'
+const APP_SUPPORT = '/home/u/.local/share/autopacx'
 const DOWNLOADS = `${APP_SUPPORT}/downloads`
 const STAGING = `${APP_SUPPORT}/staging`
 
@@ -28,7 +28,7 @@ const policy: HelperPathPolicy = {
 
 describe('privileged helper constants', () => {
   it('binds the installed helper path', () => {
-    expect(AUTONEX_HELPER_PATH).toBe('/usr/lib/autonex/autonex-helper')
+    expect(AUTOPACX_HELPER_PATH).toBe('/usr/lib/autopacx/autopacx-helper')
   })
 
   it('derives the download and install roots', () => {

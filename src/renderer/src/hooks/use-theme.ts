@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 export type Theme = 'dark' | 'light'
 
-const STORAGE_KEY = 'autonex:theme'
+const STORAGE_KEY = 'autopacx:theme'
 
 /** Reads the persisted theme, defaulting to dark. */
 export function resolveInitialTheme(): Theme {

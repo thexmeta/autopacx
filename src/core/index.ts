@@ -2,17 +2,17 @@
 // Copyright (c) 2024 PlebOne
 
 /**
- * Framework-free core of AutoNex.
+ * Framework-free core of AutoPacX.
  *
  * This module is the shared kernel of the application. It MUST stay free of
  * Electron, Node.js and DOM imports so it can be consumed by the main process,
  * the preload bridge and the renderer alike.
  */
 
-export const APP_NAME = 'autonex'
+export const APP_NAME = 'autopacx'
 
 /** Human-readable product name shown in window titles and the UI. */
-export const APP_DISPLAY_NAME = 'AutoNex'
+export const APP_DISPLAY_NAME = 'AutoPacX'
 
 export const APP_VERSION = '0.1.0'
 
@@ -23,7 +23,7 @@ export type {
   AddAppInput,
   AddDebPackageInput,
   AddPacstallPackageInput,
-  AutonexApi,
+  AutopacxApi,
   BatchDeleteSummary,
   BatchOperationResultWire,
   BatchProgressEvent,

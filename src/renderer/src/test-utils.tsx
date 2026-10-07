@@ -84,7 +84,7 @@ export function createMockApi(overrides: Record<string, unknown> = {}): Record<s
     deletePacstallPackage: vi.fn().mockResolvedValue(undefined),
     launchPacstall: vi.fn().mockResolvedValue(undefined),
     checkPacstallAllUpdates: vi.fn().mockResolvedValue({ packages: [], failures: [] }),
-    exportData: vi.fn().mockResolvedValue({ path: '/tmp/autonex-export.json' }),
+    exportData: vi.fn().mockResolvedValue({ path: '/tmp/autopacx-export.json' }),
     importData: vi.fn().mockResolvedValue({ count: 0 }),
     getDebugLog: vi.fn().mockResolvedValue({ content: '', truncated: false }),
     clearDebugLog: vi.fn().mockResolvedValue(undefined),
@@ -97,10 +97,10 @@ export function createMockApi(overrides: Record<string, unknown> = {}): Record<s
   }
 }
 
-/** Installs the mock bridge on `window.autonex` and returns it. */
+/** Installs the mock bridge on `window.autopacx` and returns it. */
 export function installMockApi(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const api = createMockApi(overrides)
-  Object.defineProperty(window, 'autonex', { configurable: true, value: api })
+  Object.defineProperty(window, 'autopacx', { configurable: true, value: api })
   return api
 }
 

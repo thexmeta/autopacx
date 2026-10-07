@@ -21,6 +21,6 @@ export function useGithubReleaseAssets(
 ): UseQueryResult<GithubReleaseAssetsWire, Error> {
   return useQuery({
     queryKey: githubReleaseAssetsQueryKey(input),
-    queryFn: () => window.autonex.getGithubReleaseAssets(input)
+    queryFn: () => window.autopacx.getGithubReleaseAssets(input)
   })
 }

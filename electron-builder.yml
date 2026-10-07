@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2024 PlebOne
 #
-# electron-builder configuration for the autonex Electron app.
-appId: com.autonex
-productName: AutoNex
-executableName: autonex
-artifactName: autonex-${version}-${arch}.${ext}
+# electron-builder configuration for the autopacx Electron app.
+appId: com.autopacx
+productName: AutoPacX
+executableName: autopacx
+artifactName: autopacx-${version}-${arch}.${ext}
 copyright: Copyright © 2024 PlebOne
 
 directories:
@@ -18,29 +18,29 @@ files:
 
 # The polkit policy and the root-owned privileged helper it binds. Shipped in
 # the package's resources; the post-install script installs them to
-# /usr/share/polkit-1/actions/org.autonex.policy and
-# /usr/lib/autonex/autonex-helper (see build/after-install.tpl).
+# /usr/share/polkit-1/actions/org.autopacx.policy and
+# /usr/lib/autopacx/autopacx-helper (see build/after-install.tpl).
 extraResources:
-  - from: resources/org.autonex.policy
-    to: org.autonex.policy
-  - from: resources/autonex-helper
-    to: autonex-helper
+  - from: resources/org.autopacx.policy
+    to: org.autopacx.policy
+  - from: resources/autopacx-helper
+    to: autopacx-helper
 
 linux:
   # deb and rpm only, for parity with the original Flutter packaging scripts.
   target:
     - deb
     - rpm
-  # Root autonex.desktop lists `Categories=Utility;PackageManager;`.
+  # Root autopacx.desktop lists `Categories=Utility;PackageManager;`.
   category: Utility;PackageManager
   icon: build/icon.png
   synopsis: GitHub-release package manager for Linux
-  description: AutoNex helps you manage and install applications from GitHub releases.
-  maintainer: AutoNex Team <team@autonex.dev>
+  description: AutoPacX helps you manage and install applications from GitHub releases.
+  maintainer: AutoPacX Team <team@autopacx.dev>
   desktop:
     entry:
       Keywords: package;github;release;manager;
-      StartupWMClass: com.autonex
+      StartupWMClass: com.autopacx
 
 # Carried over from scripts/create-debian-package.sh.
 deb:

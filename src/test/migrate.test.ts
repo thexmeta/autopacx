@@ -27,7 +27,7 @@ describe('resolveFlutterAppSupportDir', () => {
   let root: string
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'autonex-migrate-'))
+    root = mkdtempSync(join(tmpdir(), 'autopacx-migrate-'))
   })
 
   afterEach(() => {
@@ -35,7 +35,7 @@ describe('resolveFlutterAppSupportDir', () => {
   })
 
   it('uses the application-id directory when present', () => {
-    const appIdDir = join(root, 'com.autonex')
+    const appIdDir = join(root, 'com.autopacx')
     mkdirSync(appIdDir, { recursive: true })
 
     expect(resolveFlutterAppSupportDir({ env: { XDG_DATA_HOME: root }, homeDir: root })).toBe(
@@ -44,7 +44,7 @@ describe('resolveFlutterAppSupportDir', () => {
   })
 
   it('falls back to the legacy executable-name directory', () => {
-    const legacyDir = join(root, 'autonex')
+    const legacyDir = join(root, 'autopacx')
     mkdirSync(legacyDir, { recursive: true })
 
     expect(resolveFlutterAppSupportDir({ env: { XDG_DATA_HOME: root }, homeDir: root })).toBe(
@@ -54,7 +54,7 @@ describe('resolveFlutterAppSupportDir', () => {
 
   it('defaults to the application-id directory when neither exists', () => {
     expect(resolveFlutterAppSupportDir({ env: { XDG_DATA_HOME: root }, homeDir: root })).toBe(
-      join(root, 'com.autonex')
+      join(root, 'com.autopacx')
     )
   })
 })
@@ -65,9 +65,9 @@ describe('migrateFromFlutter', () => {
   let appSupportDir: string
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'autonex-migrate-'))
+    root = mkdtempSync(join(tmpdir(), 'autopacx-migrate-'))
     userDataDir = join(root, 'electron-user-data')
-    appSupportDir = join(root, 'flutter-support', 'com.autonex')
+    appSupportDir = join(root, 'flutter-support', 'com.autopacx')
     mkdirSync(appSupportDir, { recursive: true })
   })
 

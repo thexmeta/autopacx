@@ -45,7 +45,7 @@ export function IpcEventsProvider({ children }: { children: ReactNode }): JSX.El
   const [activeOperation, setActiveOperation] = useState<ActiveOperation | null>(null)
 
   useEffect(() => {
-    const unsubscribe = window.autonex.onEvent((event) => {
+    const unsubscribe = window.autopacx.onEvent((event) => {
       if ('kind' in event) {
         const terminal = event.phase === 'done' || event.phase === 'failed'
         setActiveOperation(terminal ? null : { kind: 'operation', event })

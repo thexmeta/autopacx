@@ -7,7 +7,7 @@ import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
 import type { TrackedPacstallPackage } from '@core/models/tracked-pacstall-package'
 import { isNewerVersion, normalizeVersion } from '@core/version'
-import { AUTONEX_HELPER_PATH, PACKAGE_NAME_PATTERN } from './privileged-helper'
+import { AUTOPACX_HELPER_PATH, PACKAGE_NAME_PATTERN } from './privileged-helper'
 import type { HelperVerb } from './privileged-helper'
 import { runProcess as defaultRunProcess } from './process-runner'
 import type { ProcessResult, ProcessRunner } from './process-runner'
@@ -162,7 +162,7 @@ export class PacstallService {
     this.registry =
       options.registry ?? new PacstallRegistry({ appSupportDirectory: options.appSupportDirectory })
     this.privilegedProcessRunner = options.privilegedProcessRunner ?? defaultPrivilegedProcessRunner
-    this.privilegedHelperPath = options.privilegedHelperPath ?? AUTONEX_HELPER_PATH
+    this.privilegedHelperPath = options.privilegedHelperPath ?? AUTOPACX_HELPER_PATH
     this.helperInstalled = options.helperInstalled ?? (() => fileExists(this.privilegedHelperPath))
     this.runProcess = options.runProcess ?? defaultRunProcess
     this.debugLog = options.debugLog ?? (() => {})
@@ -321,7 +321,7 @@ export class PacstallService {
     const helper = this.privilegedHelperPath
     if (!(await this.helperInstalled())) {
       throw new Error(
-        `Privileged helper not found at ${helper}. AutoNex must be installed ` +
+        `Privileged helper not found at ${helper}. AutoPacX must be installed ` +
           'from its package so the root-owned helper and polkit policy are present; ' +
           'running from a source checkout cannot perform privileged installs.'
       )

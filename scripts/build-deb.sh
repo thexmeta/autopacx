@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2024 PlebOne
 #
-# Build a Debian x64 release package for AutoNex.
+# Build a Debian x64 release package for AutoPacX.
 #
 # Usage (from the project root):  ./scripts/build-deb.sh
 #
@@ -11,7 +11,7 @@
 #   2. electron-builder --linux dir   -> release/linux-unpacked/     (only if stale)
 #   3. assemble an FHS tree in a temp dir
 #   4. dpkg-deb --root-owner-group --build
-#   5. emit dist/autonex-<version>-amd64.deb
+#   5. emit dist/autopacx-<version>-amd64.deb
 #
 # The package version is read from package.json (single source of truth) and
 # translated to a Debian-safe form ("0.1.0-beta" -> "0.1.0~beta").
@@ -25,9 +25,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
-PRODUCT_NAME="AutoNex"          # app lives in /opt/<PRODUCT_NAME>
-EXECUTABLE="autonex"            # binary basename (also the .desktop Exec + WM class target)
-PKG_NAME="autonex"
+PRODUCT_NAME="AutoPacX"          # app lives in /opt/<PRODUCT_NAME>
+EXECUTABLE="autopacx"            # binary basename (also the .desktop Exec + WM class target)
+PKG_NAME="autopacx"
 ARCH="amd64"
 
 UNPACKED="$ROOT/release/linux-unpacked"
@@ -57,7 +57,7 @@ VERSION="$(node -p "require('$ROOT/package.json').version")"
 # sorts before 0.1.0 and stays a valid upstream version.
 VERSION_DEB="${VERSION//-/\~}"
 DEB_FILE="${PKG_NAME}-${VERSION}-${ARCH}.deb"
-log "AutoNex ${VERSION} (Debian version ${VERSION_DEB}) -> dist/${DEB_FILE}"
+log "AutoPacX ${VERSION} (Debian version ${VERSION_DEB}) -> dist/${DEB_FILE}"
 
 # ---- step 1: build the app bundle -------------------------------------------
 log "Building app bundle (pnpm build)…"
@@ -80,12 +80,12 @@ else
 fi
 
 [ -x "$UNPACKED/$EXECUTABLE" ]                       || die "missing $UNPACKED/$EXECUTABLE after build"
-[ -f "$UNPACKED/resources/autonex-helper" ]          || die "missing autonex-helper in unpacked resources"
-[ -f "$UNPACKED/resources/org.autonex.policy" ]      || die "missing org.autonex.policy in unpacked resources"
+[ -f "$UNPACKED/resources/autopacx-helper" ]          || die "missing autopacx-helper in unpacked resources"
+[ -f "$UNPACKED/resources/org.autopacx.policy" ]      || die "missing org.autopacx.policy in unpacked resources"
 [ -f "$ICON_SRC" ]                                   || die "icon not found: $ICON_SRC"
 
 # ---- step 3: assemble the FHS tree ------------------------------------------
-STAGE="$(mktemp -d "${TMPDIR:-/tmp}/autonex-deb.XXXXXX")"
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/autopacx-deb.XXXXXX")"
 cleanup() { rm -rf -- "$STAGE"; }
 trap cleanup EXIT
 
@@ -96,7 +96,7 @@ install -d "$STAGE/usr/bin"
 install -d "$STAGE/usr/share/applications"
 install -d "$STAGE/usr/share/icons/hicolor/512x512/apps"
 
-# App payload -> /opt/AutoNex (binary, resources/, locales/, *.pak, *.so, …)
+# App payload -> /opt/AutoPacX (binary, resources/, locales/, *.pak, *.so, …)
 cp -a "$UNPACKED/." "$STAGE/opt/$PRODUCT_NAME/"
 chmod 0755 "$STAGE/opt/$PRODUCT_NAME/$EXECUTABLE"
 
@@ -111,9 +111,9 @@ Exec=/opt/$PRODUCT_NAME/$EXECUTABLE %U
 Terminal=false
 Type=Application
 Icon=$EXECUTABLE
-StartupWMClass=com.autonex
+StartupWMClass=com.autopacx
 Keywords=package;github;release;manager;
-Comment=AutoNex helps you manage and install applications from GitHub releases.
+Comment=AutoPacX helps you manage and install applications from GitHub releases.
 Categories=Utility;PackageManager;
 EOF
 chmod 0644 "$STAGE/usr/share/applications/$EXECUTABLE.desktop"
@@ -128,51 +128,51 @@ cat > "$STAGE/DEBIAN/control" <<EOF
 Package: $PKG_NAME
 Version: $VERSION_DEB
 Architecture: $ARCH
-Maintainer: AutoNex Team <team@autonex.dev>
+Maintainer: AutoPacX Team <team@autopacx.dev>
 Installed-Size: $INSTALLED_KB
 Depends: libgtk-3-0, libblkid1, liblzma5, libcurl4, libfreetype6
 Recommends: libappindicator3-1
 Section: utils
 Priority: optional
-Homepage: https://github.com/thexmeta/autonex
+Homepage: https://github.com/thexmeta/autopacx
 Description: GitHub-release package manager for Linux
- AutoNex helps you manage and install applications from GitHub releases.
+ AutoPacX helps you manage and install applications from GitHub releases.
 EOF
 
 # ---- step 5: maintainer scripts --------------------------------------------
-# postinst — mirrors build/after-install.tpl with ${executable}=autonex and
-# ${sanitizedProductName}=AutoNex substituted.
+# postinst — mirrors build/after-install.tpl with ${executable}=autopacx and
+# ${sanitizedProductName}=AutoPacX substituted.
 cat > "$STAGE/DEBIAN/postinst" <<'POSTINST'
 #!/bin/bash
-# AutoNex Debian post-install script.
+# AutoPacX Debian post-install script.
 #
-# Mirrors build/after-install.tpl: keeps /usr/bin/autonex in sync, fixes the
+# Mirrors build/after-install.tpl: keeps /usr/bin/autopacx in sync, fixes the
 # chrome-sandbox mode, installs the polkit policy + root-owned helper, and
 # refreshes the MIME/desktop/icon caches. Every step is best-effort.
 
-# --- /usr/bin/autonex --------------------------------------------------------
-# This package ships /usr/bin/autonex as a symlink to /opt/AutoNex/autonex.
+# --- /usr/bin/autopacx --------------------------------------------------------
+# This package ships /usr/bin/autopacx as a symlink to /opt/AutoPacX/autopacx.
 # Keep an update-alternatives entry in sync only when the link is missing or
 # foreign (e.g. left over from an earlier electron-builder install).
-if [ -L /usr/bin/autonex ] && [ "$(readlink /usr/bin/autonex)" = "/opt/AutoNex/autonex" ]; then
+if [ -L /usr/bin/autopacx ] && [ "$(readlink /usr/bin/autopacx)" = "/opt/AutoPacX/autopacx" ]; then
     : # shipped symlink is already correct
 elif type update-alternatives >/dev/null 2>&1; then
-    if [ -L /usr/bin/autonex ] && [ -e /usr/bin/autonex ] && \
-       [ "$(readlink /usr/bin/autonex)" != "/etc/alternatives/autonex" ]; then
-        rm -f /usr/bin/autonex
+    if [ -L /usr/bin/autopacx ] && [ -e /usr/bin/autopacx ] && \
+       [ "$(readlink /usr/bin/autopacx)" != "/etc/alternatives/autopacx" ]; then
+        rm -f /usr/bin/autopacx
     fi
-    update-alternatives --install /usr/bin/autonex autonex /opt/AutoNex/autonex 100 || \
-        ln -sf /opt/AutoNex/autonex /usr/bin/autonex
+    update-alternatives --install /usr/bin/autopacx autopacx /opt/AutoPacX/autopacx 100 || \
+        ln -sf /opt/AutoPacX/autopacx /usr/bin/autopacx
 else
-    ln -sf /opt/AutoNex/autonex /usr/bin/autonex
+    ln -sf /opt/AutoPacX/autopacx /usr/bin/autopacx
 fi
 
 # --- chrome-sandbox ----------------------------------------------------------
 # Use the SUID sandbox only on kernels without working user namespaces.
 if ! { [ -L /proc/self/ns/user ] && unshare --user true; } 2>/dev/null; then
-    chmod 4755 /opt/AutoNex/chrome-sandbox || true
+    chmod 4755 /opt/AutoPacX/chrome-sandbox || true
 else
-    chmod 0755 /opt/AutoNex/chrome-sandbox || true
+    chmod 0755 /opt/AutoPacX/chrome-sandbox || true
 fi
 
 # --- MIME / desktop databases ------------------------------------------------
@@ -184,10 +184,10 @@ if hash update-desktop-database 2>/dev/null; then
 fi
 
 # --- polkit policy -----------------------------------------------------------
-# Binds the org.autonex.helper action to the one root-owned helper below, so
+# Binds the org.autopacx.helper action to the one root-owned helper below, so
 # pkexec can never be turned into a generic root shell.
-POLICY_SOURCE='/opt/AutoNex/resources/org.autonex.policy'
-POLICY_TARGET='/usr/share/polkit-1/actions/org.autonex.policy'
+POLICY_SOURCE='/opt/AutoPacX/resources/org.autopacx.policy'
+POLICY_TARGET='/usr/share/polkit-1/actions/org.autopacx.policy'
 if [ -f "$POLICY_SOURCE" ]; then
     mkdir -p /usr/share/polkit-1/actions
     cp -f "$POLICY_SOURCE" "$POLICY_TARGET" || true
@@ -196,10 +196,10 @@ fi
 
 # --- root-owned privileged helper -------------------------------------------
 # Must be root:root 0755 or pkexec refuses to run it.
-HELPER_SOURCE='/opt/AutoNex/resources/autonex-helper'
-HELPER_TARGET='/usr/lib/autonex/autonex-helper'
+HELPER_SOURCE='/opt/AutoPacX/resources/autopacx-helper'
+HELPER_TARGET='/usr/lib/autopacx/autopacx-helper'
 if [ -f "$HELPER_SOURCE" ]; then
-    mkdir -p /usr/lib/autonex
+    mkdir -p /usr/lib/autopacx
     install -m 0755 -o root -g root "$HELPER_SOURCE" "$HELPER_TARGET" || \
         { cp -f "$HELPER_SOURCE" "$HELPER_TARGET" && \
           chmod 0755 "$HELPER_TARGET" && chown root:root "$HELPER_TARGET"; } || true
@@ -219,8 +219,8 @@ fi
 # Skip on AppArmor versions that cannot parse the bundled abi/4.0 profile
 # (e.g. Ubuntu 22.04); the app runs fine without it there.
 if apparmor_status --enabled >/dev/null 2>&1; then
-    APPARMOR_PROFILE_SOURCE='/opt/AutoNex/resources/apparmor-profile'
-    APPARMOR_PROFILE_TARGET='/etc/apparmor.d/autonex'
+    APPARMOR_PROFILE_SOURCE='/opt/AutoPacX/resources/apparmor-profile'
+    APPARMOR_PROFILE_TARGET='/etc/apparmor.d/autopacx'
     if apparmor_parser --skip-kernel-load --debug "$APPARMOR_PROFILE_SOURCE" >/dev/null 2>&1; then
         cp -f "$APPARMOR_PROFILE_SOURCE" "$APPARMOR_PROFILE_TARGET"
         if ! { [ -x /usr/bin/ischroot ] && /usr/bin/ischroot; } && hash apparmor_parser 2>/dev/null; then
@@ -238,12 +238,12 @@ chmod 0755 "$STAGE/DEBIAN/postinst"
 # prerm — drop the update-alternatives entry (if any) before files are removed.
 cat > "$STAGE/DEBIAN/prerm" <<'PRERM'
 #!/bin/bash
-# AutoNex Debian pre-remove script.
+# AutoPacX Debian pre-remove script.
 #
 # Remove the update-alternatives entry before dpkg unlinks the files. The
-# /usr/bin/autonex symlink shipped by the package is removed by dpkg itself.
+# /usr/bin/autopacx symlink shipped by the package is removed by dpkg itself.
 if type update-alternatives >/dev/null 2>&1; then
-    update-alternatives --remove autonex /opt/AutoNex/autonex >/dev/null 2>&1 || true
+    update-alternatives --remove autopacx /opt/AutoPacX/autopacx >/dev/null 2>&1 || true
 fi
 
 exit 0
@@ -254,7 +254,7 @@ chmod 0755 "$STAGE/DEBIAN/prerm"
 # and the AppArmor profile, and refresh the desktop/icon caches.
 cat > "$STAGE/DEBIAN/postrm" <<'POSTRM'
 #!/bin/bash
-# AutoNex Debian post-remove script.
+# AutoPacX Debian post-remove script.
 #
 # Mirrors build/after-remove.tpl: removes the installed polkit policy and the
 # root-owned privileged helper, unloads/removes the AppArmor profile, and
@@ -262,15 +262,15 @@ cat > "$STAGE/DEBIAN/postrm" <<'POSTRM'
 
 # Drop the update-alternatives entry (idempotent; a no-op if never registered).
 if type update-alternatives >/dev/null 2>&1; then
-    update-alternatives --remove autonex /opt/AutoNex/autonex >/dev/null 2>&1 || true
+    update-alternatives --remove autopacx /opt/AutoPacX/autopacx >/dev/null 2>&1 || true
 else
-    rm -f /usr/bin/autonex || true
+    rm -f /usr/bin/autopacx || true
 fi
 
 # Remove the installed polkit policy and the root-owned privileged helper.
-rm -f /usr/share/polkit-1/actions/org.autonex.policy || true
-rm -f /usr/lib/autonex/autonex-helper || true
-rmdir /usr/lib/autonex 2>/dev/null || true
+rm -f /usr/share/polkit-1/actions/org.autopacx.policy || true
+rm -f /usr/lib/autopacx/autopacx-helper || true
+rmdir /usr/lib/autopacx 2>/dev/null || true
 
 # Refresh the desktop/icon caches so the removal is reflected.
 if hash update-desktop-database 2>/dev/null; then
@@ -287,7 +287,7 @@ if [ -d /usr/share/icons/hicolor ]; then
 fi
 
 # Remove and unload the AppArmor profile.
-APPARMOR_PROFILE_DEST='/etc/apparmor.d/autonex'
+APPARMOR_PROFILE_DEST='/etc/apparmor.d/autopacx'
 if [ -f "$APPARMOR_PROFILE_DEST" ]; then
     if apparmor_status --enabled >/dev/null 2>&1; then
         if ! { [ -x /usr/bin/ischroot ] && /usr/bin/ischroot; } && hash apparmor_parser 2>/dev/null; then
@@ -321,4 +321,4 @@ echo
 dpkg-deb -I "$OUT_DEB" | sed -n '1,20p'
 echo
 log "Packaged entries of interest:"
-dpkg-deb -c "$OUT_DEB" | grep -E 'usr/bin/autonex|applications/autonex.desktop|hicolor/512x512/apps/autonex.png|org\.autonex\.policy|autonex-helper' || true
+dpkg-deb -c "$OUT_DEB" | grep -E 'usr/bin/autopacx|applications/autopacx.desktop|hicolor/512x512/apps/autopacx.png|org\.autopacx\.policy|autopacx-helper' || true

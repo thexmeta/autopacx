@@ -16,7 +16,7 @@ describe('ConfigService', () => {
   let service: ConfigService
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'autonex-config-'))
+    directory = await mkdtemp(join(tmpdir(), 'autopacx-config-'))
     store = new JsonStore(directory)
     service = new ConfigService(store, '1.2.3')
   })
@@ -38,7 +38,7 @@ describe('ConfigService', () => {
 
     const path = await service.exportConfig()
 
-    expect(path.startsWith(join(directory, 'autonex-export-'))).toBe(true)
+    expect(path.startsWith(join(directory, 'autopacx-export-'))).toBe(true)
     const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
     expect(written['schemaVersion']).toBe('1.0')
     expect(written['appVersion']).toBe('1.2.3')
@@ -60,7 +60,7 @@ describe('ConfigService', () => {
     const config = new AppConfig({
       schemaVersion: '1.0',
       exportedAt: new Date('2026-01-01T00:00:00Z'),
-      appName: 'Autonex',
+      appName: 'Autopacx',
       appVersion: '1.2.3',
       apps: [
         new TrackedAppData({ repoOwner: 'owner', repoName: 'existing', displayName: 'Existing' }),

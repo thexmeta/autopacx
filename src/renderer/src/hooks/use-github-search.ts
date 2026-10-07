@@ -86,7 +86,7 @@ export function useGithubSearch(options: UseGithubSearchOptions): UseGithubSearc
     queryFn: async () => ({
       query: debouncedQuery,
       page,
-      result: await window.autonex.searchGithubRepositories({
+      result: await window.autopacx.searchGithubRepositories({
         query: debouncedQuery,
         ...(sort != null ? { sort } : {}),
         ...(perPage != null ? { perPage } : {}),

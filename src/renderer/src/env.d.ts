@@ -3,11 +3,11 @@
 
 /// <reference types="vite/client" />
 
-import type { AutonexApi } from '@core/index'
+import type { AutopacxApi } from '@core/index'
 
 declare global {
   interface Window {
-    readonly autonex: AutonexApi
+    readonly autopacx: AutopacxApi
   }
 }
 

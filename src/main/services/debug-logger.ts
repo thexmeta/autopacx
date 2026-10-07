@@ -7,7 +7,7 @@ import * as path from 'node:path'
 /**
  * Debug logger, ported from `lib/services/debug_logger.dart`.
  *
- * Writes timestamped lines to `autonex_debug.log` inside the app-data
+ * Writes timestamped lines to `autopacx_debug.log` inside the app-data
  * directory, rotating the file once it would grow past 1 MB. Logging is
  * enabled by default and toggled from the persisted `enable_debug_logging`
  * setting by the composition root (and by the `setSettings` handler).
@@ -21,7 +21,7 @@ import * as path from 'node:path'
  * `DateTime.now().toString().substring(0, 19)`).
  */
 
-export const DEBUG_LOG_FILE_NAME = 'autonex_debug.log'
+export const DEBUG_LOG_FILE_NAME = 'autopacx_debug.log'
 
 /** Maximum on-disk log size before it is truncated to its newest half. */
 export const DEFAULT_MAX_LOG_BYTES = 1024 * 1024 // 1 MB

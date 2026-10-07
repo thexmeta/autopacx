@@ -9,10 +9,10 @@ import { join } from 'node:path'
 export const MIGRATED_FILES = ['apps.json', 'deb_packages.json', 'settings.json'] as const
 
 /** GTK application id set by the Flutter runner (`linux/CMakeLists.txt`). */
-export const FLUTTER_APP_ID = 'com.autonex'
+export const FLUTTER_APP_ID = 'com.autopacx'
 
 /** Executable name used by path_provider_linux's backwards-compatibility path. */
-export const FLUTTER_EXECUTABLE_NAME = 'autonex'
+export const FLUTTER_EXECUTABLE_NAME = 'autopacx'
 
 export interface FlutterDirOptions {
   readonly env: Readonly<Record<string, string | undefined>>

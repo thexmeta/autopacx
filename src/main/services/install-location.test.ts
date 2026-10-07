@@ -67,7 +67,7 @@ describe('InstallLocationResolver', () => {
   let tmp: string
 
   beforeEach(async () => {
-    tmp = await mkdtemp(join(tmpdir(), 'autonex-loc-test-'))
+    tmp = await mkdtemp(join(tmpdir(), 'autopacx-loc-test-'))
   })
 
   afterEach(async () => {
@@ -217,7 +217,7 @@ describe('suggestInstallTargets', () => {
   let tmp: string
 
   beforeEach(async () => {
-    tmp = await mkdtemp(join(tmpdir(), 'autonex-targets-test-'))
+    tmp = await mkdtemp(join(tmpdir(), 'autopacx-targets-test-'))
   })
 
   afterEach(async () => {

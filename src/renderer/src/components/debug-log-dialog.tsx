@@ -26,14 +26,14 @@ export function DebugLogDialog({ open, onClose }: DebugLogDialogProps): JSX.Elem
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['debugLog'],
-    queryFn: () => window.autonex.getDebugLog(),
+    queryFn: () => window.autopacx.getDebugLog(),
     enabled: open
   })
 
   async function handleClear(): Promise<void> {
     setClearing(true)
     try {
-      await window.autonex.clearDebugLog()
+      await window.autopacx.clearDebugLog()
       await queryClient.invalidateQueries({ queryKey: ['debugLog'] })
       notify({ tone: 'success', message: 'Debug log cleared.' })
     } catch (clearError) {

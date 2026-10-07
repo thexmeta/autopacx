@@ -22,7 +22,7 @@ import { InstallType } from '@core/models/install-type'
 import { TrackedApp } from '@core/models/tracked-app'
 import { TrackedDebPackage } from '@core/models/tracked-deb-package'
 import { InstallerService } from './installer-service'
-import { AUTONEX_HELPER_PATH } from './privileged-helper'
+import { AUTOPACX_HELPER_PATH } from './privileged-helper'
 import type {
   DetachedProcess,
   DetachedSpawner,
@@ -42,7 +42,7 @@ import type {
 const noBinaryWarning = 'This entry cant be installable. It doesnt include binary/executable.'
 
 /** The installed helper every privileged argv must go through. */
-const HELPER = AUTONEX_HELPER_PATH
+const HELPER = AUTOPACX_HELPER_PATH
 
 function emptyStream(): AsyncIterable<Uint8Array> {
   return Readable.from([]) as AsyncIterable<Uint8Array>
@@ -213,7 +213,7 @@ describe('InstallerService.installPackage binary', () => {
   let tmp: string
 
   beforeEach(async () => {
-    tmp = await mkdtemp(join(tmpdir(), 'autonex-inst-test-'))
+    tmp = await mkdtemp(join(tmpdir(), 'autopacx-inst-test-'))
   })
 
   afterEach(async () => {
@@ -265,7 +265,7 @@ describe('InstallerService.installPackage binary', () => {
     expect(await exists(`${target}.tmp`)).toBe(false)
 
     const leftovers = (await systemTempEntries()).filter(
-      (entry) => entry.startsWith('autonex_binary_') && !before.includes(entry)
+      (entry) => entry.startsWith('autopacx_binary_') && !before.includes(entry)
     )
     expect(leftovers).toEqual([])
   }, 20_000)
@@ -435,7 +435,7 @@ describe('InstallerService.installPackage binary', () => {
 
     await expect(
       service.installPackage(raw, InstallType.binary, {
-        targetPath: '/dev/autonex-not-a-device'
+        targetPath: '/dev/autopacx-not-a-device'
       })
     ).rejects.toThrow('Refusing to install into /dev')
 
@@ -478,7 +478,7 @@ describe('InstallerService.downloadFile transport limits', () => {
   let tmp: string
 
   beforeEach(async () => {
-    tmp = await mkdtemp(join(tmpdir(), 'autonex-dl-test-'))
+    tmp = await mkdtemp(join(tmpdir(), 'autopacx-dl-test-'))
     service = new InstallerService({ appSupportDirectory: async () => tmp, maxDownloadBytes: 1024 })
   })
 
@@ -573,7 +573,7 @@ describe('InstallerService privileged install path', () => {
   let recorded: string[][]
 
   beforeEach(async () => {
-    tmp = await mkdtemp(join(tmpdir(), 'autonex-priv-test-'))
+    tmp = await mkdtemp(join(tmpdir(), 'autopacx-priv-test-'))
     appData = join(tmp, 'appdata')
     await mkdir(appData)
     recorded = []
@@ -1092,7 +1092,7 @@ describe('InstallerService deb launch command', () => {
   let appData: string
 
   beforeEach(async () => {
-    tmp = await mkdtemp(join(tmpdir(), 'autonex-launch-test-'))
+    tmp = await mkdtemp(join(tmpdir(), 'autopacx-launch-test-'))
     appData = join(tmp, 'appdata')
     await mkdir(appData)
     service = new InstallerService({
@@ -1138,7 +1138,7 @@ describe('InstallerService detached launch', () => {
   let stderrOn: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
-    tmp = await mkdtemp(join(tmpdir(), 'autonex-detach-test-'))
+    tmp = await mkdtemp(join(tmpdir(), 'autopacx-detach-test-'))
     appData = join(tmp, 'appdata')
     await mkdir(appData)
     calls = []

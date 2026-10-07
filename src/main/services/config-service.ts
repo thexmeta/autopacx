@@ -9,7 +9,7 @@ import type { TrackedApp } from '@core/models/tracked-app'
 import type { JsonStore } from '../store/json-store'
 
 /** Fixed filename the import action reads, mirroring the Dart settings sheet. */
-export const IMPORT_FILE_NAME = 'autonex-import.json'
+export const IMPORT_FILE_NAME = 'autopacx-import.json'
 
 /** Highest id currently in use, or 0 when the list is empty. */
 function maxId(apps: readonly TrackedApp[]): number {
@@ -20,8 +20,8 @@ function maxId(apps: readonly TrackedApp[]): number {
  * Config export/import, ported from `DatabaseService.exportConfig` /
  * `DatabaseService.importConfig`.
  *
- * Export writes `autonex-export-<date>.json` into the app data directory and
- * returns its path. Import reads the fixed `autonex-import.json` from the
+ * Export writes `autopacx-export-<date>.json` into the app data directory and
+ * returns its path. Import reads the fixed `autopacx-import.json` from the
  * same directory, adds any app whose `owner/name` pair is not already tracked,
  * and returns how many were added.
  */
@@ -39,7 +39,7 @@ export class ConfigService {
     const config = new AppConfig({
       schemaVersion: '1.0',
       exportedAt: new Date(),
-      appName: 'AutoNex',
+      appName: 'AutoPacX',
       appVersion: this.appVersion,
       apps: apps.map(
         (app) =>
@@ -64,7 +64,7 @@ export class ConfigService {
     })
 
     const date = new Date().toISOString().split('T')[0]
-    const file = join(this.store.directory, `autonex-export-${date}.json`)
+    const file = join(this.store.directory, `autopacx-export-${date}.json`)
     await writeFile(file, JSON.stringify(config.toJson()), 'utf8')
     return file
   }

@@ -25,7 +25,7 @@ const PACSTALL_KEYS: QueryKey[] = [['pacstallPackages'], ['pacstallStatus']]
 export function usePacstallStatus(): UseQueryResult<PacstallStatusWire, Error> {
   return useQuery({
     queryKey: ['pacstallStatus'],
-    queryFn: () => window.autonex.getPacstallStatus()
+    queryFn: () => window.autopacx.getPacstallStatus()
   })
 }
 
@@ -33,7 +33,7 @@ export function usePacstallStatus(): UseQueryResult<PacstallStatusWire, Error> {
 export function usePacstallIndex(): UseQueryResult<PacstallIndexWire, Error> {
   return useQuery({
     queryKey: ['pacstallIndex'],
-    queryFn: () => window.autonex.getPacstallIndex()
+    queryFn: () => window.autopacx.getPacstallIndex()
   })
 }
 
@@ -46,7 +46,7 @@ export function usePacstallPackageInfo(
 ): UseQueryResult<PacstallPackageInfoWire, Error> {
   return useQuery({
     queryKey: ['pacstallPackageInfo', name],
-    queryFn: () => window.autonex.getPacstallPackageInfo({ name: name ?? '' }),
+    queryFn: () => window.autopacx.getPacstallPackageInfo({ name: name ?? '' }),
     enabled: name != null && name.length > 0
   })
 }
@@ -62,7 +62,7 @@ export function rehydratePacstallPackages(
 export function usePacstallPackages(): UseQueryResult<TrackedPacstallPackage[], Error> {
   return useQuery({
     queryKey: ['pacstallPackages'],
-    queryFn: async () => rehydratePacstallPackages(await window.autonex.getPacstallPackages())
+    queryFn: async () => rehydratePacstallPackages(await window.autopacx.getPacstallPackages())
   })
 }
 
@@ -85,35 +85,35 @@ export type PacstallActions = {
  */
 export function usePacstallActions(): PacstallActions {
   const addPacstall = useWrite(
-    (input: AddPacstallPackageInput) => window.autonex.addPacstallPackage(input),
+    (input: AddPacstallPackageInput) => window.autopacx.addPacstallPackage(input),
     { errorLabel: 'Add pacstall package', invalidate: PACSTALL_KEYS }
   )
   const installPacstall = useWrite(
-    (pkg: TrackedPacstallPackage) => window.autonex.installPacstallPackage(pkg.toMap()),
+    (pkg: TrackedPacstallPackage) => window.autopacx.installPacstallPackage(pkg.toMap()),
     { errorLabel: 'Install', invalidate: PACSTALL_KEYS }
   )
   const uninstallPacstall = useWrite(
-    (pkg: TrackedPacstallPackage) => window.autonex.uninstallPacstallPackage(pkg.toMap()),
+    (pkg: TrackedPacstallPackage) => window.autopacx.uninstallPacstallPackage(pkg.toMap()),
     { errorLabel: 'Uninstall', invalidate: PACSTALL_KEYS }
   )
   const launchPacstall = useWrite(
-    (pkg: TrackedPacstallPackage) => window.autonex.launchPacstall(pkg.toMap()),
+    (pkg: TrackedPacstallPackage) => window.autopacx.launchPacstall(pkg.toMap()),
     { errorLabel: 'Launch', invalidate: [] }
   )
   const checkPacstallUpdate = useWrite(
-    (pkg: TrackedPacstallPackage) => window.autonex.checkPacstallUpdate(pkg.toMap()),
+    (pkg: TrackedPacstallPackage) => window.autopacx.checkPacstallUpdate(pkg.toMap()),
     { errorLabel: 'Check for updates', invalidate: PACSTALL_KEYS }
   )
   const updatePacstall = useWrite(
-    (pkg: TrackedPacstallPackage) => window.autonex.updatePacstallPackage(pkg.toMap()),
+    (pkg: TrackedPacstallPackage) => window.autopacx.updatePacstallPackage(pkg.toMap()),
     { errorLabel: 'Update', invalidate: PACSTALL_KEYS }
   )
-  const deletePacstall = useWrite((id: number) => window.autonex.deletePacstallPackage(id), {
+  const deletePacstall = useWrite((id: number) => window.autopacx.deletePacstallPackage(id), {
     errorLabel: 'Delete',
     invalidate: PACSTALL_KEYS
   })
   const checkPacstallAll = useWrite<void, PacstallBatchUpdateResult>(
-    () => window.autonex.checkPacstallAllUpdates(),
+    () => window.autopacx.checkPacstallAllUpdates(),
     { errorLabel: 'Check pacstall updates', invalidate: PACSTALL_KEYS }
   )
 

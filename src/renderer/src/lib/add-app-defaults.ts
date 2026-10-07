@@ -3,7 +3,7 @@
 
 import { DEFAULT_ARCH_TYPES, InstallType, type MaskedSettings } from '@core/index'
 
-/** The install type a new app starts with (empty means "let AutoNex decide"). */
+/** The install type a new app starts with (empty means "let AutoPacX decide"). */
 export const DEFAULT_ADD_APP_INSTALL_TYPE = ''
 
 /**

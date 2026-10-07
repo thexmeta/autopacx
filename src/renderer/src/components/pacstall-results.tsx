@@ -209,7 +209,7 @@ export function PacstallResults(): JSX.Element {
         >
           {pathUnexpected ? (
             <p>
-              pacstall resolved to an unexpected path ({status.data?.path ?? 'unknown'}). AutoNex
+              pacstall resolved to an unexpected path ({status.data?.path ?? 'unknown'}). AutoPacX
               only installs through <code>/usr/bin/pacstall</code>.
             </p>
           ) : (

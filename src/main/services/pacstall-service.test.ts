@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseSrcInfo } from '@core/index'
 import type { PacstallPackageInfo } from '@core/index'
 import { TrackedPacstallPackage } from '@core/models/tracked-pacstall-package'
-import { AUTONEX_HELPER_PATH } from './privileged-helper'
+import { AUTOPACX_HELPER_PATH } from './privileged-helper'
 import type { ProcessResult, ProcessRunner } from './process-runner'
 import type { PacstallRegistryLike } from './pacstall-registry'
 import { PacstallService } from './pacstall-service'
@@ -43,7 +43,7 @@ describe('PacstallService', () => {
   let recorded: string[][]
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'autonex-pacstall-'))
+    dir = await mkdtemp(join(tmpdir(), 'autopacx-pacstall-'))
     metadataDirectory = join(dir, 'metadata')
     await mkdir(metadataDirectory, { recursive: true })
     recorded = []
@@ -140,10 +140,10 @@ describe('PacstallService', () => {
       await service.upgradeAll()
 
       expect(recorded).toEqual([
-        ['pkexec', AUTONEX_HELPER_PATH, 'pacstall-install', 'neovim'],
-        ['pkexec', AUTONEX_HELPER_PATH, 'pacstall-remove', 'neovim'],
-        ['pkexec', AUTONEX_HELPER_PATH, 'pacstall-upgrade', 'neovim'],
-        ['pkexec', AUTONEX_HELPER_PATH, 'pacstall-upgrade-all']
+        ['pkexec', AUTOPACX_HELPER_PATH, 'pacstall-install', 'neovim'],
+        ['pkexec', AUTOPACX_HELPER_PATH, 'pacstall-remove', 'neovim'],
+        ['pkexec', AUTOPACX_HELPER_PATH, 'pacstall-upgrade', 'neovim'],
+        ['pkexec', AUTOPACX_HELPER_PATH, 'pacstall-upgrade-all']
       ])
     })
 

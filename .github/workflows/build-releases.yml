@@ -66,7 +66,7 @@ jobs:
               pnpm exec electron-builder --linux dir
               VERSION=$(node -p "require('./package.json').version")
               mkdir -p dist/linux-x64
-              tar -czf "dist/linux-x64/autonex-${VERSION}-linux-x64.tar.gz" \
+              tar -czf "dist/linux-x64/autopacx-${VERSION}-linux-x64.tar.gz" \
                 -C release linux-unpacked
               ;;
           esac
@@ -127,16 +127,16 @@ jobs:
 
             **Debian / Ubuntu (.deb)**
             ```bash
-            sudo dpkg -i autonex_*_amd64.deb
+            sudo dpkg -i autopacx_*_amd64.deb
             ```
 
             **Fedora / RHEL / CentOS (.rpm)**
             ```bash
-            sudo rpm -i autonex-*.x86_64.rpm
+            sudo rpm -i autopacx-*.x86_64.rpm
             ```
 
             **Any Linux x64 (portable tarball)**
             ```bash
-            tar -xzf autonex-*-linux-x64.tar.gz
-            ./linux-unpacked/autonex
+            tar -xzf autopacx-*-linux-x64.tar.gz
+            ./linux-unpacked/autopacx
             ```

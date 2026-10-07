@@ -29,11 +29,11 @@ describe('useTheme', () => {
 
     expect(result.current.theme).toBe('light')
     expect(document.documentElement.dataset['theme']).toBe('light')
-    expect(localStorage.getItem('autonex:theme')).toBe('light')
+    expect(localStorage.getItem('autopacx:theme')).toBe('light')
   })
 
   it('restores a persisted theme on mount', () => {
-    localStorage.setItem('autonex:theme', 'light')
+    localStorage.setItem('autopacx:theme', 'light')
 
     renderHook(() => useTheme())
 

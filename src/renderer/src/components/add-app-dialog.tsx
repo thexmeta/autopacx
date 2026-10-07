@@ -176,7 +176,7 @@ export function AddAppDialog({ open, onClose }: AddAppDialogProps): JSX.Element 
     try {
       // The session denies the `clipboard-read` permission, so the renderer
       // cannot use `navigator.clipboard`; the main process reads it instead.
-      const text = (await window.autonex.readClipboardText()).trim()
+      const text = (await window.autopacx.readClipboardText()).trim()
       // Normalise a pasted GitHub URL/slug to the canonical `owner/name`, but
       // keep unparseable text verbatim so the user can see and fix it.
       const parsed = parseRepoReference(text)

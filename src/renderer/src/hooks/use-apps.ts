@@ -18,6 +18,6 @@ export function rehydrateApps(wire: readonly TrackedAppWire[]): TrackedApp[] {
 export function useApps(): UseQueryResult<TrackedApp[], Error> {
   return useQuery({
     queryKey: ['apps'],
-    queryFn: async () => rehydrateApps(await window.autonex.getApps())
+    queryFn: async () => rehydrateApps(await window.autopacx.getApps())
   })
 }

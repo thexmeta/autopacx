@@ -59,7 +59,7 @@ export function App(): JSX.Element {
             onToggleTheme={toggleTheme}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenDebugLog={() => setDebugLogOpen(true)}
-            version={window.autonex.version}
+            version={window.autopacx.version}
           />
           <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <header className="border-b border-border px-6 py-4">

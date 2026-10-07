@@ -78,7 +78,7 @@ export type InstallAppVariables = {
  *
  * Components call `mutation.mutate(...)`/`mutateAsync(...)`; a mutation's
  * `isPending` and `variables` drive per-row button disabling, and its result
- * feeds success notifications. All writes funnel through `window.autonex`
+ * feeds success notifications. All writes funnel through `window.autopacx`
  * so the renderer never touches Node or Electron directly.
  */
 export function useActions(): {
@@ -115,61 +115,61 @@ export function useActions(): {
       // Pass the second argument only when options are supplied, so the common
       // "install latest" path stays a single-argument call.
       options === undefined
-        ? window.autonex.installApp(app.toMap())
-        : window.autonex.installApp(app.toMap(), options),
+        ? window.autopacx.installApp(app.toMap())
+        : window.autopacx.installApp(app.toMap(), options),
     { errorLabel: 'Install' }
   )
-  const uninstallApp = useWrite((app: TrackedApp) => window.autonex.uninstallApp(app.toMap()), {
+  const uninstallApp = useWrite((app: TrackedApp) => window.autopacx.uninstallApp(app.toMap()), {
     errorLabel: 'Uninstall'
   })
-  const launchApp = useWrite((app: TrackedApp) => window.autonex.launchApp(app.toMap()), {
+  const launchApp = useWrite((app: TrackedApp) => window.autopacx.launchApp(app.toMap()), {
     errorLabel: 'Launch'
   })
-  const checkAppUpdate = useWrite((app: TrackedApp) => window.autonex.checkAppUpdate(app.toMap()), {
+  const checkAppUpdate = useWrite((app: TrackedApp) => window.autopacx.checkAppUpdate(app.toMap()), {
     errorLabel: 'Check for updates'
   })
-  const deleteApp = useWrite((id: number) => window.autonex.deleteApp(id), {
+  const deleteApp = useWrite((id: number) => window.autopacx.deleteApp(id), {
     errorLabel: 'Delete'
   })
-  const addApp = useWrite((input: AddAppInput) => window.autonex.addApp(input), {
+  const addApp = useWrite((input: AddAppInput) => window.autopacx.addApp(input), {
     errorLabel: 'Add app'
   })
-  const updateApp = useWrite((app: TrackedApp) => window.autonex.updateApp(app.toMap()), {
+  const updateApp = useWrite((app: TrackedApp) => window.autopacx.updateApp(app.toMap()), {
     errorLabel: 'Update app'
   })
 
-  const installDeb = useWrite((pkg: TrackedDebPackage) => window.autonex.installDeb(pkg.toMap()), {
+  const installDeb = useWrite((pkg: TrackedDebPackage) => window.autopacx.installDeb(pkg.toMap()), {
     errorLabel: 'Install'
   })
   const uninstallDeb = useWrite(
-    (pkg: TrackedDebPackage) => window.autonex.uninstallDebPackage(pkg.toMap()),
+    (pkg: TrackedDebPackage) => window.autopacx.uninstallDebPackage(pkg.toMap()),
     { errorLabel: 'Uninstall' }
   )
-  const launchDeb = useWrite((pkg: TrackedDebPackage) => window.autonex.launchDeb(pkg.toMap()), {
+  const launchDeb = useWrite((pkg: TrackedDebPackage) => window.autopacx.launchDeb(pkg.toMap()), {
     errorLabel: 'Launch'
   })
   const checkDebUpdate = useWrite(
-    (pkg: TrackedDebPackage) => window.autonex.checkDebUpdate(pkg.toMap()),
+    (pkg: TrackedDebPackage) => window.autopacx.checkDebUpdate(pkg.toMap()),
     { errorLabel: 'Check for updates' }
   )
-  const deleteDeb = useWrite((id: number) => window.autonex.deleteDebPackage(id), {
+  const deleteDeb = useWrite((id: number) => window.autopacx.deleteDebPackage(id), {
     errorLabel: 'Delete'
   })
   const addDebPackage = useWrite(
-    (input: AddDebPackageInput) => window.autonex.addDebPackage(input),
+    (input: AddDebPackageInput) => window.autopacx.addDebPackage(input),
     { errorLabel: 'Add package' }
   )
   const updateDebPackage = useWrite(
-    (pkg: TrackedDebPackage) => window.autonex.updateDebPackage(pkg.toMap()),
+    (pkg: TrackedDebPackage) => window.autopacx.updateDebPackage(pkg.toMap()),
     { errorLabel: 'Update package' }
   )
 
-  const checkAll = useWrite<void, BatchUpdateResult>(() => window.autonex.checkAllUpdates(), {
+  const checkAll = useWrite<void, BatchUpdateResult>(() => window.autopacx.checkAllUpdates(), {
     errorLabel: 'Check all updates'
   })
   const batchInstall = useWrite(
     ({ apps, debPackages }: BatchItemsInput) =>
-      window.autonex.batchInstall(
+      window.autopacx.batchInstall(
         apps.map((app) => app.toMap()),
         debPackages.map((pkg) => pkg.toMap()),
         []
@@ -178,12 +178,12 @@ export function useActions(): {
   )
   const batchDelete = useWrite(
     ({ appIds, debIds }: { appIds: number[]; debIds: number[] }) =>
-      window.autonex.batchDelete(appIds, debIds, []),
+      window.autopacx.batchDelete(appIds, debIds, []),
     { errorLabel: 'Batch delete' }
   )
   const batchUpdate = useWrite(
     ({ apps, debPackages }: BatchItemsInput) =>
-      window.autonex.batchUpdate(
+      window.autopacx.batchUpdate(
         apps.map((app) => app.toMap()),
         debPackages.map((pkg) => pkg.toMap()),
         []
@@ -191,24 +191,24 @@ export function useActions(): {
     { errorLabel: 'Batch update' }
   )
 
-  const exportData = useWrite<void, ExportResult>(() => window.autonex.exportData(), {
+  const exportData = useWrite<void, ExportResult>(() => window.autopacx.exportData(), {
     errorLabel: 'Export',
     invalidate: []
   })
-  const importData = useWrite<void, ImportResult>(() => window.autonex.importData(), {
+  const importData = useWrite<void, ImportResult>(() => window.autopacx.importData(), {
     errorLabel: 'Import'
   })
 
-  const openExternal = useWrite((url: string) => window.autonex.openExternal(url), {
+  const openExternal = useWrite((url: string) => window.autopacx.openExternal(url), {
     errorLabel: 'Open link',
     invalidate: []
   })
 
-  const setGithubToken = useWrite((token: string) => window.autonex.setGithubToken(token), {
+  const setGithubToken = useWrite((token: string) => window.autopacx.setGithubToken(token), {
     errorLabel: 'Save token',
     invalidate: SETTINGS_KEYS
   })
-  const setSettings = useWrite((settings: Settings) => window.autonex.setSettings(settings), {
+  const setSettings = useWrite((settings: Settings) => window.autopacx.setSettings(settings), {
     errorLabel: 'Save settings',
     invalidate: SETTINGS_KEYS
   })

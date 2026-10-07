@@ -197,14 +197,14 @@ describe('AppConfig', () => {
     const config = new AppConfig({
       schemaVersion: '1.0',
       exportedAt: new Date('2026-01-01T00:00:00Z'),
-      appName: 'Autonex',
+      appName: 'Autopacx',
       appVersion: '0.3.4',
       apps: []
     })
 
     expect(config.schemaVersion).toBe('1.0')
     expect(config.exportedAt).toEqual(new Date('2026-01-01T00:00:00Z'))
-    expect(config.appName).toBe('Autonex')
+    expect(config.appName).toBe('Autopacx')
     expect(config.appVersion).toBe('0.3.4')
     expect(config.apps).toEqual([])
   })
@@ -213,7 +213,7 @@ describe('AppConfig', () => {
     const config = new AppConfig({
       schemaVersion: '1.0',
       exportedAt: new Date('2026-01-01T00:00:00Z'),
-      appName: 'Autonex',
+      appName: 'Autopacx',
       appVersion: '0.3.4',
       apps: [
         new TrackedAppData({
@@ -227,7 +227,7 @@ describe('AppConfig', () => {
     const json = config.toJson()
     expect(json['schemaVersion']).toBe('1.0')
     expect(json['exportedAt']).toBe('2026-01-01T00:00:00.000Z')
-    expect(json['appName']).toBe('Autonex')
+    expect(json['appName']).toBe('Autopacx')
     expect(json['appVersion']).toBe('0.3.4')
     expect(Array.isArray(json['apps'])).toBe(true)
     expect((json['apps'] as unknown[]).length).toBe(1)
@@ -237,7 +237,7 @@ describe('AppConfig', () => {
     const json: Record<string, unknown> = {
       schemaVersion: '1.0',
       exportedAt: '2026-01-01T00:00:00.000Z',
-      appName: 'Autonex',
+      appName: 'Autopacx',
       appVersion: '0.3.4',
       apps: [
         {
@@ -251,7 +251,7 @@ describe('AppConfig', () => {
     const config = AppConfig.fromJson(json)
     expect(config.schemaVersion).toBe('1.0')
     expect(config.exportedAt).toEqual(new Date('2026-01-01T00:00:00.000Z'))
-    expect(config.appName).toBe('Autonex')
+    expect(config.appName).toBe('Autopacx')
     expect(config.appVersion).toBe('0.3.4')
     expect(config.apps.length).toBe(1)
     expect(config.apps[0].repoOwner).toBe('owner')
@@ -277,7 +277,7 @@ describe('AppConfig', () => {
     const original = new AppConfig({
       schemaVersion: '1.0',
       exportedAt: new Date('2026-01-01T00:00:00Z'),
-      appName: 'Autonex',
+      appName: 'Autopacx',
       appVersion: '0.3.4',
       apps: [
         new TrackedAppData({
@@ -327,7 +327,7 @@ describe('AppConfig export/import scenarios', () => {
     const config = new AppConfig({
       schemaVersion: '1.0',
       exportedAt: new Date(),
-      appName: 'Autonex',
+      appName: 'Autopacx',
       appVersion: '0.3.4',
       apps: []
     })
@@ -351,7 +351,7 @@ describe('AppConfig export/import scenarios', () => {
     const config = new AppConfig({
       schemaVersion: '1.0',
       exportedAt: new Date(),
-      appName: 'Autonex',
+      appName: 'Autopacx',
       appVersion: '0.3.4',
       apps
     })
@@ -367,7 +367,7 @@ describe('AppConfig export/import scenarios', () => {
     const config = new AppConfig({
       schemaVersion: '1.0',
       exportedAt: new Date(),
-      appName: 'Autonex',
+      appName: 'Autopacx',
       appVersion: '0.3.4',
       apps: [
         new TrackedAppData({

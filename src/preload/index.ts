@@ -6,7 +6,7 @@ import {
   APP_VERSION,
   IPC_CHANNEL_PREFIX,
   IPC_EVENT_CHANNEL,
-  type AutonexApi,
+  type AutopacxApi,
   type IpcEvent,
   type IpcMethod
 } from '@core/index'
@@ -47,7 +47,7 @@ function invoke<T>(method: IpcMethod, ...args: unknown[]): Promise<T> {
   return ipcRenderer.invoke(`${IPC_CHANNEL_PREFIX}${method}`, ...args) as Promise<T>
 }
 
-const api: AutonexApi = {
+const api: AutopacxApi = {
   version: APP_VERSION,
 
   // --- Reads -----------------------------------------------------------------
@@ -154,4 +154,4 @@ const api: AutonexApi = {
   }
 }
 
-contextBridge.exposeInMainWorld('autonex', api)
+contextBridge.exposeInMainWorld('autopacx', api)

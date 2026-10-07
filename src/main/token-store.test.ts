@@ -36,7 +36,7 @@ describe('TokenStore', () => {
   let store: JsonStore
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'autonex-token-'))
+    directory = await mkdtemp(join(tmpdir(), 'autopacx-token-'))
     store = new JsonStore(directory)
   })
 

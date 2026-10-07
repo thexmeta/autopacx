@@ -133,7 +133,7 @@ export function InstallOptionsDialog({
       title={`Install ${app.displayName}`}
       description={
         isAppImage
-          ? 'AutoNex installs this AppImage for you.'
+          ? 'AutoPacX installs this AppImage for you.'
           : 'Choose where the binary is installed.'
       }
       size="md"

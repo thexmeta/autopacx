@@ -19,6 +19,6 @@ export function useInstallTargets(
 ): UseQueryResult<InstallTargetsResultWire, Error> {
   return useQuery({
     queryKey: installTargetsQueryKey(input),
-    queryFn: () => window.autonex.getInstallTargets(input)
+    queryFn: () => window.autopacx.getInstallTargets(input)
   })
 }

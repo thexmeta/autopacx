@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2024 PlebOne
 #
-# AutoNex privileged helper.
+# AutoPacX privileged helper.
 #
-# This is the ONLY program bound to the `org.autonex.helper` polkit action
-# (see resources/org.autonex.policy), so `pkexec` can never be turned into a
+# This is the ONLY program bound to the `org.autopacx.helper` polkit action
+# (see resources/org.autopacx.policy), so `pkexec` can never be turned into a
 # generic root shell: every privileged step the app takes is an argv array
-# `pkexec /usr/lib/autonex/autonex-helper <verb> <args...>`.
+# `pkexec /usr/lib/autopacx/autopacx-helper <verb> <args...>`.
 #
 # Design rules, mirroring src/main/services/privileged-helper.ts:
 #   * A strict verb protocol; an unknown verb exits 2.
@@ -17,18 +17,18 @@
 #   * Package names must match ^[A-Za-z0-9][A-Za-z0-9+._-]*$.
 #   * No `eval`; no unvalidated value is ever interpolated into a command.
 #
-# It is installed root:root 0755 at /usr/lib/autonex/autonex-helper by the
+# It is installed root:root 0755 at /usr/lib/autopacx/autopacx-helper by the
 # package post-install script. Running it as a non-root user is meaningless but
 # harmless: the underlying commands will simply fail.
 
 set -eu
 
 fail() {
-    echo "autonex-helper: $1" >&2
+    echo "autopacx-helper: $1" >&2
     exit 2
 }
 
-[ "$#" -ge 1 ] || fail "usage: autonex-helper <verb> [args...]"
+[ "$#" -ge 1 ] || fail "usage: autopacx-helper <verb> [args...]"
 verb="$1"
 shift
 
@@ -98,7 +98,7 @@ run_pacstall() {
     exec /usr/bin/pacstall "$@" -P
 }
 
-APP_DATA="$caller_home/.local/share/autonex"
+APP_DATA="$caller_home/.local/share/autopacx"
 DOWNLOAD_ROOTS="$(canon "$APP_DATA/downloads") $(canon "$APP_DATA/staging")"
 INSTALL_ROOTS="/usr/local/bin /usr/bin /bin /usr/local/lib /usr/lib /usr/share /opt $(canon "$caller_home/.local/bin") $(canon "$caller_home/.local/lib")"
 
@@ -142,7 +142,7 @@ atomic-install)
     # `install` alone is not atomic (it unlinks the destination); `mv` within
     # the same directory is an atomic rename(2), so the target is either the old
     # binary or the new one, never absent or half-written.
-    /usr/bin/install -m 755 -- "$src" "$dest.autonex-new" && /usr/bin/mv -f -- "$dest.autonex-new" "$dest"
+    /usr/bin/install -m 755 -- "$src" "$dest.autopacx-new" && /usr/bin/mv -f -- "$dest.autopacx-new" "$dest"
     ;;
 
 pacstall-install)

@@ -77,7 +77,7 @@ describe('JsonStore', () => {
   let dir: string
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'autonex-store-'))
+    dir = mkdtempSync(join(tmpdir(), 'autopacx-store-'))
   })
 
   afterEach(() => {

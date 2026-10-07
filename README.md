@@ -1,4 +1,4 @@
-# AutoNex
+# AutoPacX
 
 ## Screenshots
 
@@ -43,11 +43,11 @@ pnpm package     # build a Linux AppImage with electron-builder
 ## Privileged operations (pkexec + polkit)
 
 Installing a package, removing one, or writing a binary into a system directory
-requires root. AutoNex never builds a shell string and never asks `pkexec` to
+requires root. AutoPacX never builds a shell string and never asks `pkexec` to
 run a generic interpreter or package manager. Every privileged step is an argv
 array of the form
-`pkexec /usr/lib/autonex/autonex-helper <verb> <args...>`, where the
-root-owned helper (`resources/autonex-helper`) accepts a small, validated
+`pkexec /usr/lib/autopacx/autopacx-helper <verb> <args...>`, where the
+root-owned helper (`resources/autopacx-helper`) accepts a small, validated
 verb protocol (`apt-install`, `rpm-install`, `dpkg-remove`, `rpm-remove`,
 `atomic-install`, `backup`, `cleanup`) and rejects any path outside the app's
 own download/staging directories or a fixed install-directory allowlist. For the
@@ -58,12 +58,12 @@ the machine:
    `polkit-kde-agent`, or the agent shipped by the desktop environment. Without
    one, `pkexec` fails with `Error executing command as another user: No
 authentication agent found`.
-2. **This policy file and helper installed** — `resources/org.autonex.policy`
-   copied to `/usr/share/polkit-1/actions/org.autonex.policy`, and
-   `resources/autonex-helper` installed root:root 0755 at
-   `/usr/lib/autonex/autonex-helper`. The policy binds its single action to
+2. **This policy file and helper installed** — `resources/org.autopacx.policy`
+   copied to `/usr/share/polkit-1/actions/org.autopacx.policy`, and
+   `resources/autopacx-helper` installed root:root 0755 at
+   `/usr/lib/autopacx/autopacx-helper`. The policy binds its single action to
    that one helper, so the prompt reads "Authentication is required to install
-   or remove a package with AutoNex" and no other program can be run through
+   or remove a package with AutoPacX" and no other program can be run through
    the action. Authentication is required every time (`auth_admin`, not
    `auth_admin_keep`), so approvals are never cached.
 
@@ -72,10 +72,10 @@ Both files are shipped inside the package (via `extraResources` in
 install them by hand from a source checkout:
 
 ```bash
-sudo install -m 644 resources/org.autonex.policy \
-  /usr/share/polkit-1/actions/org.autonex.policy
-sudo install -m 755 -o root -g root resources/autonex-helper \
-  /usr/lib/autonex/autonex-helper
+sudo install -m 644 resources/org.autopacx.policy \
+  /usr/share/polkit-1/actions/org.autopacx.policy
+sudo install -m 755 -o root -g root resources/autopacx-helper \
+  /usr/lib/autopacx/autopacx-helper
 ```
 
 Running the app from a source checkout without those two files is supported, but

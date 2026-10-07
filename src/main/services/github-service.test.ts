@@ -289,7 +289,7 @@ describe('GitHubService request construction', () => {
 
     const [url, init] = request.mock.calls[0]
     expect(url).toBe('https://api.github.com/repos/owner/repo/releases?per_page=42')
-    expect(init?.headers?.['User-Agent']).toMatch(/^autonex\/\d+\.\d+\.\d+ \(/)
+    expect(init?.headers?.['User-Agent']).toMatch(/^autopacx\/\d+\.\d+\.\d+ \(/)
     expect(init?.headers?.['Accept']).toBe('application/vnd.github+json')
     expect(init?.headers?.['X-GitHub-Api-Version']).toBe('2022-11-28')
     expect(init?.headers?.['Authorization']).toBeUndefined()

@@ -52,7 +52,7 @@ export function FilterPreview({
       arch
     ],
     queryFn: () =>
-      window.autonex.getGithubReleaseAssets({
+      window.autopacx.getGithubReleaseAssets({
         repoOwner,
         repoName,
         ...(includePrerelease != null ? { includePrerelease } : {}),

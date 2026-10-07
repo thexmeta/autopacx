@@ -1,4 +1,4 @@
-# AutoNex architecture
+# AutoPacX architecture
 
 A GitHub-release package manager for Linux, built with Electron, React 19 and
 TypeScript. This document describes the layer boundaries, the IPC contract, the
@@ -26,9 +26,9 @@ core  ←  main   (Electron main process)
   shared vocabulary and has no I/O.
 - **main** owns the window, the security policy, the services and every side
   effect (filesystem, network, `pkexec`, `shell`).
-- **preload** is the single, typed bridge. It exposes `window.autonex` via
+- **preload** is the single, typed bridge. It exposes `window.autopacx` via
   `contextBridge` and never leaks `ipcRenderer`/`require`/`fs`.
-- **renderer** is React + Tailwind. It calls only `window.autonex` and never
+- **renderer** is React + Tailwind. It calls only `window.autopacx` and never
   touches Node or Electron.
 
 Path aliases (`@core`, `@renderer`) are configured in `electron.vite.config.ts`
@@ -36,14 +36,14 @@ and mirrored in the `tsconfig*.json` files.
 
 ## IPC contract
 
-Every channel is `autonex:<method>`, where `<method>` is a member of the
+Every channel is `autopacx:<method>`, where `<method>` is a member of the
 `IPC_METHODS` tuple in `src/core/api.ts`. There is a single push channel,
-`autonex:event`, for progress events.
+`autopacx:event`, for progress events.
 
 **Type-level completeness.** `IpcMethod` is derived from `IPC_METHODS`. Both
 the handler map (`IpcHandlers` in `src/main/ipc-handlers.ts`) and the result
 schema map (`resultSchemas` in `src/main/ipc.ts`) are _total records_ over
-`IpcMethod`, and `AutonexApi` (preload) implements every method. Adding a
+`IpcMethod`, and `AutopacxApi` (preload) implements every method. Adding a
 channel without a handler, a result schema or a preload method fails typecheck.
 
 **Two-sided validation.** Each handler parses its own arguments against a Zod
@@ -62,7 +62,7 @@ Registration is idempotent so per-window (re)creation rebinds cleanly.
 
 **Progress events.** Long-running sweeps (`batchInstall`, `batchDelete`,
 `batchUpdate`, `checkAllUpdates`) emit `BatchProgressEvent`s on
-`autonex:event`. `checkAllUpdates` never aborts on a single unreachable
+`autopacx:event`. `checkAllUpdates` never aborts on a single unreachable
 repository: it collects per-item failures and returns them alongside the
 refreshed lists, so the renderer can report "N of M failed" while still showing
 what did succeed.
@@ -100,15 +100,15 @@ the transport channel while looping over the same service calls.
 ## Privileged-helper protocol
 
 Installing a package, removing one, or writing a binary into a system directory
-requires root. AutoNex never builds a shell string and never asks `pkexec` to
+requires root. AutoPacX never builds a shell string and never asks `pkexec` to
 run a generic interpreter or package manager. Every privileged step is an argv
 array:
 
 ```
-pkexec /usr/lib/autonex/autonex-helper <verb> <args...>
+pkexec /usr/lib/autopacx/autopacx-helper <verb> <args...>
 ```
 
-The root-owned helper (`resources/autonex-helper`, installed by the package
+The root-owned helper (`resources/autopacx-helper`, installed by the package
 post-install script) accepts a small, validated verb protocol — `apt-install`,
 `rpm-install`, `dpkg-remove`, `rpm-remove`, `atomic-install`, `backup`,
 `cleanup` — and rejects any path outside the app's own download/staging
@@ -117,7 +117,7 @@ of that validation is `src/main/services/privileged-helper.ts`, which the POSIX
 `sh` helper mirrors one-for-one; it is unit-tested and lets the app fail with a
 clear error before spawning `pkexec`.
 
-The polkit policy (`resources/org.autonex.policy`) binds its single action to
+The polkit policy (`resources/org.autopacx.policy`) binds its single action to
 that one helper (`auth_admin`, never cached), so `pkexec` cannot be turned into
 a generic root shell. If the helper is absent (dev/unpackaged run) the install
 fails with "Privileged helper not found" rather than falling back.
@@ -151,14 +151,14 @@ boolean; `setSettings` refuses to write token keys (they are owned by
   the `after-install.tpl` / `after-remove.tpl` maintainer scripts, which
   electron-builder reads at package time; they are deliberately **not** ignored
   by `.gitignore`.
-- **Privileged assets** — `resources/org.autonex.policy` and
-  `resources/autonex-helper` ship via `extraResources`; the post-install
+- **Privileged assets** — `resources/org.autopacx.policy` and
+  `resources/autopacx-helper` ship via `extraResources`; the post-install
   script installs them to `/usr/share/polkit-1/actions/` and
-  `/usr/lib/autonex/` and the post-remove script cleans them up.
+  `/usr/lib/autopacx/` and the post-remove script cleans them up.
 
 ## Testing
 
 Vitest (`pnpm test`) covers core models, the main-process services and IPC
 handlers (with stubbed ports, no Electron), the preload contract, and the
 renderer components with Testing Library. The renderer tests assert the
-`window.autonex` bridge is called with the correct wire maps.
+`window.autopacx` bridge is called with the correct wire maps.

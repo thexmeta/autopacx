@@ -10,7 +10,7 @@ import { DEBUG_LOG_FILE_NAME, DebugLogger, formatLogData, localTimestamp } from 
 let dir: string
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(tmpdir(), 'autonex-log-'))
+  dir = await fs.mkdtemp(path.join(tmpdir(), 'autopacx-log-'))
 })
 
 afterEach(async () => {

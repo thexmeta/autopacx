@@ -12,7 +12,7 @@ import { InstallType } from '@core/models/install-type'
 import type { TrackedApp } from '@core/models/tracked-app'
 import type { TrackedDebPackage } from '@core/models/tracked-deb-package'
 import { InstallLocationResolver } from './install-location'
-import { AUTONEX_HELPER_PATH } from './privileged-helper'
+import { AUTOPACX_HELPER_PATH } from './privileged-helper'
 import type { HelperVerb } from './privileged-helper'
 import { runProcess } from './process-runner'
 import type { ProcessResult } from './process-runner'
@@ -22,7 +22,7 @@ import type { ProcessResult } from './process-runner'
  *
  * A Node/Electron port of the Flutter installer. Every privileged action goes
  * through `pkexec` with an argv array (never a shell string): the app invokes
- * `pkexec /usr/lib/autonex/autonex-helper <verb> <args...>` and the
+ * `pkexec /usr/lib/autopacx/autopacx-helper <verb> <args...>` and the
  * root-owned helper validates the verb and every path before running anything.
  * The polkit policy binds that one helper, so `pkexec` cannot be turned into a
  * generic root shell. Both output streams are always drained.
@@ -372,7 +372,7 @@ export class InstallerService {
     this.debugLog = options.debugLog ?? noopDebugLog
     this.spawnDetached = options.spawnDetached ?? defaultDetachedSpawner
     this.maxDownloadBytes = options.maxDownloadBytes ?? DEFAULT_MAX_DOWNLOAD_BYTES
-    this.privilegedHelperPath = options.privilegedHelperPath ?? AUTONEX_HELPER_PATH
+    this.privilegedHelperPath = options.privilegedHelperPath ?? AUTOPACX_HELPER_PATH
     this.helperInstalled = options.helperInstalled ?? (() => fileExists(this.privilegedHelperPath))
   }
 
@@ -689,7 +689,7 @@ export class InstallerService {
       let payload: string
       let effectiveName: string
       if (isArchive) {
-        tempDir = await fs.mkdtemp(path.join(tmpdir(), 'autonex_binary_'))
+        tempDir = await fs.mkdtemp(path.join(tmpdir(), 'autopacx_binary_'))
         await this.extractArchive(filePath, tempDir)
         payload = await this.locatePayload(tempDir, binaryName ?? null, filePath)
         // Archives get the same ELF guarantee raw downloads already have: an
@@ -1353,7 +1353,7 @@ export class InstallerService {
     const helper = this.privilegedHelperPath
     if (!(await this.helperInstalled())) {
       throw new Error(
-        `Privileged helper not found at ${helper}. AutoNex must be installed ` +
+        `Privileged helper not found at ${helper}. AutoPacX must be installed ` +
           'from its package so the root-owned helper and polkit policy are present; ' +
           'running from a source checkout cannot perform privileged installs.'
       )

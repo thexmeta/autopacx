@@ -8,7 +8,7 @@ import type { GitHubRepoSearchSort, MaskedSettings } from '@core/index'
 export function useSettings(): UseQueryResult<MaskedSettings, Error> {
   return useQuery({
     queryKey: ['settings'],
-    queryFn: () => window.autonex.getSettings()
+    queryFn: () => window.autopacx.getSettings()
   })
 }
 
@@ -16,7 +16,7 @@ export function useSettings(): UseQueryResult<MaskedSettings, Error> {
 export function useHasGithubToken(): UseQueryResult<boolean, Error> {
   return useQuery({
     queryKey: ['hasGithubToken'],
-    queryFn: () => window.autonex.hasGithubToken()
+    queryFn: () => window.autopacx.hasGithubToken()
   })
 }
 

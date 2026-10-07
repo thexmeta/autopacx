@@ -18,10 +18,10 @@ const BASE_URL = 'https://api.github.com'
 /**
  * Descriptive User-Agent. GitHub rejects requests without one, and asks
  * integrators to identify themselves with a product token and a contact URL.
- * The Dart original resolves `AutoNex/<version>` from `PackageInfo` at
+ * The Dart original resolves `AutoPacX/<version>` from `PackageInfo` at
  * runtime; here the version is the compile-time core constant.
  */
-const DEFAULT_USER_AGENT = `${APP_NAME}/${APP_VERSION} (+https://github.com/thexmeta/autonex)`
+const DEFAULT_USER_AGENT = `${APP_NAME}/${APP_VERSION} (+https://github.com/thexmeta/autopacx)`
 
 /** Default bound for a single GitHub request, enforced with an `AbortController`. */
 const DEFAULT_TIMEOUT_MS = 15_000

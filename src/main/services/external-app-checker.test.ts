@@ -68,7 +68,7 @@ describe('ExternalAppChecker.extractVersion', () => {
     expect(ExternalAppChecker.extractVersion('git version 2.34.1')).toBe('2.34.1')
     expect(ExternalAppChecker.extractVersion('Docker version 24.0.5, build ced0996')).toBe('24.0.5')
     expect(ExternalAppChecker.extractVersion('Python 3.10.12')).toBe('3.10.12')
-    expect(ExternalAppChecker.extractVersion('autonex 0.3.5')).toBe('0.3.5')
+    expect(ExternalAppChecker.extractVersion('autopacx 0.3.5')).toBe('0.3.5')
   })
 
   it('extracts short versions', () => {
