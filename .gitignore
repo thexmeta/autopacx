@@ -16,6 +16,5 @@ _tmp_*
 !build/after-install.tpl
 !build/after-remove.tpl
 
-# The repository root ignores `docs/`; this app keeps its own architecture
-# notes, so re-include the directory for this subtree.
-!docs/
+# Agent / planning artifacts under docs/ are not tracked.
+docs/
