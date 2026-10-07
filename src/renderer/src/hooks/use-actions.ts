@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-query'
 import type { TrackedApp } from '@core/models/tracked-app'
 import type { TrackedDebPackage } from '@core/models/tracked-deb-package'
+import type { TrackedPacstallPackage } from '@core/models/tracked-pacstall-package'
 import type {
   AddAppInput,
   AddDebPackageInput,
@@ -39,7 +40,7 @@ type WriteOptions = {
  * the affected queries so the lists refetch, and surface a persistent error
  * notification when the IPC call rejects.
  */
-function useWrite<TVariables, TData>(
+export function useWrite<TVariables, TData>(
   mutationFn: (variables: TVariables) => Promise<TData>,
   options: WriteOptions
 ): UseMutationResult<TData, Error, TVariables> {
@@ -62,6 +63,7 @@ function useWrite<TVariables, TData>(
 export type BatchItemsInput = {
   apps: TrackedApp[]
   debPackages: TrackedDebPackage[]
+  pacstallPackages?: TrackedPacstallPackage[]
 }
 
 /** Variables for {@link useActions}'s `installApp` mutation. */
@@ -96,7 +98,11 @@ export function useActions(): {
   updateDebPackage: UseMutationResult<void, Error, TrackedDebPackage>
   checkAll: UseMutationResult<BatchUpdateResult, Error, void>
   batchInstall: UseMutationResult<BatchOperationResultWire[], Error, BatchItemsInput>
-  batchDelete: UseMutationResult<BatchDeleteSummary, Error, { appIds: number[]; debIds: number[] }>
+  batchDelete: UseMutationResult<
+    BatchDeleteSummary,
+    Error,
+    { appIds: number[]; debIds: number[]; pacstallIds?: number[] }
+  >
   batchUpdate: UseMutationResult<BatchOperationResultWire[], Error, BatchItemsInput>
   exportData: UseMutationResult<ExportResult, Error, void>
   importData: UseMutationResult<ImportResult, Error, void>
@@ -119,12 +125,9 @@ export function useActions(): {
   const launchApp = useWrite((app: TrackedApp) => window.autonex.launchApp(app.toMap()), {
     errorLabel: 'Launch'
   })
-  const checkAppUpdate = useWrite(
-    (app: TrackedApp) => window.autonex.checkAppUpdate(app.toMap()),
-    {
-      errorLabel: 'Check for updates'
-    }
-  )
+  const checkAppUpdate = useWrite((app: TrackedApp) => window.autonex.checkAppUpdate(app.toMap()), {
+    errorLabel: 'Check for updates'
+  })
   const deleteApp = useWrite((id: number) => window.autonex.deleteApp(id), {
     errorLabel: 'Delete'
   })
@@ -135,12 +138,9 @@ export function useActions(): {
     errorLabel: 'Update app'
   })
 
-  const installDeb = useWrite(
-    (pkg: TrackedDebPackage) => window.autonex.installDeb(pkg.toMap()),
-    {
-      errorLabel: 'Install'
-    }
-  )
+  const installDeb = useWrite((pkg: TrackedDebPackage) => window.autonex.installDeb(pkg.toMap()), {
+    errorLabel: 'Install'
+  })
   const uninstallDeb = useWrite(
     (pkg: TrackedDebPackage) => window.autonex.uninstallDebPackage(pkg.toMap()),
     { errorLabel: 'Uninstall' }
@@ -171,20 +171,22 @@ export function useActions(): {
     ({ apps, debPackages }: BatchItemsInput) =>
       window.autonex.batchInstall(
         apps.map((app) => app.toMap()),
-        debPackages.map((pkg) => pkg.toMap())
+        debPackages.map((pkg) => pkg.toMap()),
+        []
       ),
     { errorLabel: 'Batch install' }
   )
   const batchDelete = useWrite(
     ({ appIds, debIds }: { appIds: number[]; debIds: number[] }) =>
-      window.autonex.batchDelete(appIds, debIds),
+      window.autonex.batchDelete(appIds, debIds, []),
     { errorLabel: 'Batch delete' }
   )
   const batchUpdate = useWrite(
     ({ apps, debPackages }: BatchItemsInput) =>
       window.autonex.batchUpdate(
         apps.map((app) => app.toMap()),
-        debPackages.map((pkg) => pkg.toMap())
+        debPackages.map((pkg) => pkg.toMap()),
+        []
       ),
     { errorLabel: 'Batch update' }
   )

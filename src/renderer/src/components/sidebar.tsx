@@ -6,7 +6,7 @@ import { APP_DISPLAY_NAME } from '@core/index'
 import { cn } from '@renderer/src/lib/cn'
 import { Button } from './ui'
 
-export type View = 'apps' | 'debs'
+export type View = 'apps' | 'debs' | 'discover' | 'pacstall'
 
 type NavItemProps = {
   active: boolean
@@ -58,6 +58,12 @@ export function Sidebar({
         </NavItem>
         <NavItem active={view === 'debs'} onClick={() => onSelectView('debs')}>
           Deb packages
+        </NavItem>
+        <NavItem active={view === 'discover'} onClick={() => onSelectView('discover')}>
+          Discover
+        </NavItem>
+        <NavItem active={view === 'pacstall'} onClick={() => onSelectView('pacstall')}>
+          pacstall
         </NavItem>
       </nav>
       <div className="space-y-2 border-t border-border px-2 py-3">

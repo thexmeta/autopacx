@@ -4,15 +4,52 @@
 import { useState, type JSX } from 'react'
 import type { MaskedSettings } from '@core/index'
 import { useActions } from '@renderer/src/hooks/use-actions'
-import { useHasGithubToken, useSettings } from '@renderer/src/hooks/use-settings'
+import { usePacstallStatus } from '@renderer/src/hooks/use-pacstall'
+import {
+  defaultArchitectures,
+  defaultArchTypes,
+  defaultInstallType
+} from '@renderer/src/lib/add-app-defaults'
+import {
+  GITHUB_SEARCH_SORT_OPTIONS,
+  resolveGithubSearchPerPage,
+  resolveGithubSearchSort,
+  useHasGithubToken,
+  useSettings
+} from '@renderer/src/hooks/use-settings'
 import { useTheme, type Theme } from '@renderer/src/hooks/use-theme'
 import { useNotifications } from './notifications'
-import { Button, Dialog, SelectField, Switch, TextField } from './ui'
+import { ArchSelect } from './arch-select'
+import { Button, Dialog, SegmentedControl, SelectField, Switch, TextField } from './ui'
 
-const ARCHITECTURE_OPTIONS = ['amd64', 'arm64', 'x86_64', 'arm', 'armhf', 'i386'].map((arch) => ({
-  value: arch,
-  label: arch
-}))
+/**
+ * Install formats a new app may default to. Values match the model's
+ * `InstallType`; an empty value means "let the app decide" (the installer
+ * identifies the format from the release asset).
+ */
+const INSTALL_TYPE_OPTIONS = [
+  { value: '', label: 'Not specified' },
+  { value: 'appImage', label: 'AppImage' },
+  { value: 'binary', label: 'Binary' },
+  { value: 'deb', label: 'DEB' }
+] as const
+
+/** Splits a comma-separated list into trimmed, non-empty entries. */
+function parseList(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+}
+
+const THEME_OPTIONS: readonly { value: Theme; label: string }[] = [
+  { value: 'dark', label: 'Dark' },
+  { value: 'light', label: 'Light' }
+]
+
+const DEFAULT_REGISTRY_REPO = 'pacstall/pacstall-programs'
+const DEFAULT_REGISTRY_BRANCH = 'master'
+const DEFAULT_INDEX_TTL_HOURS = 24
 
 export type SettingsSheetProps = {
   open: boolean
@@ -36,6 +73,7 @@ type SettingsFormProps = {
 function SettingsForm({ settings, hasToken }: SettingsFormProps): JSX.Element {
   const { theme, setTheme } = useTheme()
   const { setGithubToken, setSettings, exportData, importData } = useActions()
+  const pacstallStatus = usePacstallStatus()
   const { notify } = useNotifications()
 
   const [token, setToken] = useState('')
@@ -44,10 +82,44 @@ function SettingsForm({ settings, hasToken }: SettingsFormProps): JSX.Element {
       ? String(settings.github_releases_per_page)
       : '100'
   )
-  const [defaultArch, setDefaultArch] = useState(
-    typeof settings.default_architecture === 'string' ? settings.default_architecture : 'amd64'
+  const [architectures, setArchitectures] = useState<string[]>(() => defaultArchitectures(settings))
+  const [archTypesInput, setArchTypesInput] = useState(() => defaultArchTypes(settings).join(', '))
+  const [installType, setInstallType] = useState(() => defaultInstallType(settings))
+  const [assetFilterPattern, setAssetFilterPattern] = useState(
+    typeof settings.default_asset_filter_pattern === 'string'
+      ? settings.default_asset_filter_pattern
+      : ''
+  )
+  const [binaryInstallDir, setBinaryInstallDir] = useState(
+    typeof settings.default_binary_install_dir === 'string'
+      ? settings.default_binary_install_dir
+      : ''
   )
   const [debugLogging, setDebugLogging] = useState(settings.enable_debug_logging === true)
+
+  const [searchSort, setSearchSort] = useState(resolveGithubSearchSort(settings.github_search_sort))
+  const [searchPerPage, setSearchPerPage] = useState(
+    String(resolveGithubSearchPerPage(settings.github_search_per_page))
+  )
+
+  const [pacstallEnabled, setPacstallEnabled] = useState(settings.pacstall_enabled === true)
+  const [registryRepo, setRegistryRepo] = useState(
+    typeof settings.pacstall_registry_repo === 'string' &&
+      settings.pacstall_registry_repo.length > 0
+      ? settings.pacstall_registry_repo
+      : DEFAULT_REGISTRY_REPO
+  )
+  const [registryBranch, setRegistryBranch] = useState(
+    typeof settings.pacstall_registry_branch === 'string' &&
+      settings.pacstall_registry_branch.length > 0
+      ? settings.pacstall_registry_branch
+      : DEFAULT_REGISTRY_BRANCH
+  )
+  const [indexTtl, setIndexTtl] = useState(
+    typeof settings.pacstall_index_ttl_hours === 'number'
+      ? String(settings.pacstall_index_ttl_hours)
+      : String(DEFAULT_INDEX_TTL_HOURS)
+  )
 
   function handleTheme(next: Theme): void {
     setTheme(next)
@@ -79,10 +151,30 @@ function SettingsForm({ settings, hasToken }: SettingsFormProps): JSX.Element {
     }
   }
 
-  async function handleSaveArchitecture(): Promise<void> {
+  async function handleSaveSearchDefaults(): Promise<void> {
+    const count = resolveGithubSearchPerPage(searchPerPage)
     try {
-      await setSettings.mutateAsync({ default_architecture: defaultArch })
-      notify({ tone: 'success', message: 'Default architecture saved.' })
+      await setSettings.mutateAsync({
+        github_search_sort: searchSort,
+        github_search_per_page: count
+      })
+      setSearchPerPage(String(count))
+      notify({ tone: 'success', message: 'GitHub search defaults saved.' })
+    } catch {
+      // onError notified already.
+    }
+  }
+
+  async function handleSaveDefaults(): Promise<void> {
+    try {
+      await setSettings.mutateAsync({
+        default_architectures: architectures,
+        default_arch_type: parseList(archTypesInput),
+        default_install_type: installType,
+        default_asset_filter_pattern: assetFilterPattern.trim(),
+        default_binary_install_dir: binaryInstallDir.trim()
+      })
+      notify({ tone: 'success', message: 'Add-app defaults saved.' })
     } catch {
       // onError notified already.
     }
@@ -94,6 +186,39 @@ function SettingsForm({ settings, hasToken }: SettingsFormProps): JSX.Element {
       await setSettings.mutateAsync({ enable_debug_logging: next })
     } catch {
       setDebugLogging(!next)
+    }
+  }
+
+  async function handleTogglePacstall(next: boolean): Promise<void> {
+    setPacstallEnabled(next)
+    try {
+      await setSettings.mutateAsync({ pacstall_enabled: next })
+    } catch {
+      setPacstallEnabled(!next)
+    }
+  }
+
+  async function handleSaveRegistry(): Promise<void> {
+    const repo = registryRepo.trim()
+    const branch = registryBranch.trim()
+    const ttl = Number.parseInt(indexTtl, 10)
+    if (repo.length === 0 || branch.length === 0) {
+      notify({ tone: 'warning', message: 'Registry repo and branch are required.' })
+      return
+    }
+    if (Number.isNaN(ttl) || ttl < 0) {
+      notify({ tone: 'warning', message: 'Index TTL must be zero or more hours.' })
+      return
+    }
+    try {
+      await setSettings.mutateAsync({
+        pacstall_registry_repo: repo,
+        pacstall_registry_branch: branch,
+        pacstall_index_ttl_hours: ttl
+      })
+      notify({ tone: 'success', message: 'pacstall registry settings saved.' })
+    } catch {
+      // onError notified already.
     }
   }
 
@@ -115,26 +240,25 @@ function SettingsForm({ settings, hasToken }: SettingsFormProps): JSX.Element {
     }
   }
 
+  const detected = pacstallStatus.data
+  const detectedLabel = pacstallStatus.isPending
+    ? 'Checking…'
+    : detected == null
+      ? 'Unknown'
+      : detected.installed
+        ? `Detected${detected.version != null ? ` — v${detected.version}` : ''}`
+        : 'Not detected'
+
   return (
     <div className="space-y-5">
       <section className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Theme</h3>
-        <div className="flex gap-2">
-          <Button
-            variant={theme === 'dark' ? 'primary' : 'default'}
-            size="small"
-            onClick={() => handleTheme('dark')}
-          >
-            Dark
-          </Button>
-          <Button
-            variant={theme === 'light' ? 'primary' : 'default'}
-            size="small"
-            onClick={() => handleTheme('light')}
-          >
-            Light
-          </Button>
-        </div>
+        <SegmentedControl
+          ariaLabel="Theme"
+          options={THEME_OPTIONS}
+          value={theme}
+          onChange={handleTheme}
+        />
       </section>
 
       <section className="space-y-2">
@@ -179,15 +303,103 @@ function SettingsForm({ settings, hasToken }: SettingsFormProps): JSX.Element {
       </section>
 
       <section className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Defaults</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+          GitHub repository search
+        </h3>
         <SelectField
-          label="Default architecture"
-          options={ARCHITECTURE_OPTIONS}
-          value={defaultArch}
-          onChange={(event) => setDefaultArch(event.target.value)}
+          label="Default sort"
+          options={GITHUB_SEARCH_SORT_OPTIONS}
+          value={searchSort}
+          onChange={(event) => setSearchSort(resolveGithubSearchSort(event.target.value))}
         />
-        <Button variant="default" size="small" onClick={() => void handleSaveArchitecture()}>
-          Save default architecture
+        <TextField
+          label="Results per page"
+          hint="Between 1 and 100"
+          inputMode="numeric"
+          value={searchPerPage}
+          onChange={(event) => setSearchPerPage(event.target.value)}
+        />
+        <Button variant="default" size="small" onClick={() => void handleSaveSearchDefaults()}>
+          Save search defaults
+        </Button>
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">pacstall</h3>
+        <Switch
+          label="Enable pacstall integration"
+          description="Show pacstall packages in Discover and allow installs."
+          checked={pacstallEnabled}
+          onCheckedChange={(next) => void handleTogglePacstall(next)}
+        />
+        <p className="text-2xs text-muted">Status: {detectedLabel}</p>
+        <Button
+          variant="ghost"
+          size="small"
+          disabled={pacstallStatus.isFetching}
+          onClick={() => void pacstallStatus.refetch()}
+        >
+          {pacstallStatus.isFetching ? 'Detecting…' : 'Detect again'}
+        </Button>
+        <TextField
+          label="Registry repo"
+          hint="owner/repo of the pacstall registry"
+          placeholder={DEFAULT_REGISTRY_REPO}
+          value={registryRepo}
+          onChange={(event) => setRegistryRepo(event.target.value)}
+        />
+        <TextField
+          label="Registry branch"
+          placeholder={DEFAULT_REGISTRY_BRANCH}
+          value={registryBranch}
+          onChange={(event) => setRegistryBranch(event.target.value)}
+        />
+        <TextField
+          label="Index cache TTL (hours)"
+          hint="How long the registry index stays fresh"
+          inputMode="numeric"
+          value={indexTtl}
+          onChange={(event) => setIndexTtl(event.target.value)}
+        />
+        <Button variant="default" size="small" onClick={() => void handleSaveRegistry()}>
+          Save pacstall settings
+        </Button>
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+          Defaults for new apps
+        </h3>
+        <ArchSelect value={architectures} onChange={setArchitectures} />
+        <TextField
+          label="Architecture types"
+          hint="Comma-separated architecture types the picker offers, e.g. amd64, arm64"
+          value={archTypesInput}
+          onChange={(event) => setArchTypesInput(event.target.value)}
+        />
+        <SelectField
+          label="Default install type"
+          hint="Expected package format; leave unspecified to detect from the release asset"
+          options={INSTALL_TYPE_OPTIONS}
+          value={installType}
+          onChange={(event) => setInstallType(event.target.value)}
+        />
+        <TextField
+          label="Default asset filter pattern"
+          hint="Filter release assets by filename, e.g. *.deb or *amd64*"
+          placeholder="*.deb"
+          value={assetFilterPattern}
+          onChange={(event) => setAssetFilterPattern(event.target.value)}
+        />
+        <TextField
+          label="Default binary install location"
+          hint="Directory new binary installs default to, e.g. ~/.local/bin"
+          placeholder="~/.local/bin"
+          value={binaryInstallDir}
+          onChange={(event) => setBinaryInstallDir(event.target.value)}
+        />
+        <Button variant="default" size="small" onClick={() => void handleSaveDefaults()}>
+          Save defaults
         </Button>
       </section>
 

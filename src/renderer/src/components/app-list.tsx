@@ -2,16 +2,32 @@
 // Copyright (c) 2024 PlebOne
 
 import { lazy, Suspense, useMemo, useState, type JSX } from 'react'
-import type { BatchOperationResultWire, InstallOptions } from '@core/index'
+import {
+  applyFilter,
+  compareByName,
+  type BatchOperationResultWire,
+  type InstallOptions,
+  type ItemFilter
+} from '@core/index'
 import type { TrackedApp } from '@core/models/tracked-app'
 import { useActions } from '@renderer/src/hooks/use-actions'
 import { useApps } from '@renderer/src/hooks/use-apps'
+import { totalCheckedItems } from '@renderer/src/hooks/use-ipc-events'
+import { formatDate } from '@renderer/src/lib/format-date'
 import { needsInstallTarget } from '@renderer/src/lib/install-options'
 import { BatchActionBar } from './batch-action-bar'
 import { DialogFallback } from './lazy-dialog'
 import { useNotifications } from './notifications'
 import { SearchField } from './search-field'
-import { Badge, Button, ConfirmDialog, EmptyState, IconButton, Spinner } from './ui'
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  IconButton,
+  SegmentedControl,
+  Spinner
+} from './ui'
 
 // Rarely-used, heavy surfaces are split into their own chunks and fetched the
 // first time they are opened, keeping the always-visible list in the main bundle.
@@ -129,6 +145,7 @@ function TrackedAppRow({
         <span className={app.hasUpdate ? 'font-semibold text-star' : undefined}>
           Latest: {app.latestVersion ?? '—'}
         </span>
+        {app.latestReleaseDate ? <span>Released: {formatDate(app.latestReleaseDate)}</span> : null}
       </div>
 
       {!multiSelect ? (
@@ -243,6 +260,7 @@ export function AppList(): JSX.Element {
   const { notify } = useNotifications()
 
   const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<ItemFilter>('all')
   const [multiSelect, setMultiSelect] = useState(false)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   const [addOpen, setAddOpen] = useState(false)
@@ -252,9 +270,14 @@ export function AppList(): JSX.Element {
   const apps = useMemo(() => data ?? [], [data])
   const visibleApps = useMemo(() => {
     const needle = query.trim().toLowerCase()
-    if (needle.length === 0) return apps
-    return apps.filter((app) => searchText(app).includes(needle))
-  }, [apps, query])
+    const searched =
+      needle.length === 0 ? apps : apps.filter((app) => searchText(app).includes(needle))
+    const filtered = applyFilter(searched, filter, {
+      isInstalled: (app) => app.isInstalled,
+      hasUpdate: (app) => app.hasUpdate
+    })
+    return filtered.sort(compareByName)
+  }, [apps, query, filter])
 
   const selectedApps = visibleApps.filter((app) => selectedKeys.has(appKey(app)))
   const batchBusy = batchInstall.isPending || batchDelete.isPending || batchUpdate.isPending
@@ -285,7 +308,7 @@ export function AppList(): JSX.Element {
   async function runCheckAll(): Promise<void> {
     try {
       const result = await checkAll.mutateAsync()
-      const total = result.apps.length + result.debPackages.length
+      const total = totalCheckedItems(result)
       if (result.failures.length === 0) {
         notify({ tone: 'success', message: `Checked ${total} item(s).` })
       } else {
@@ -360,6 +383,16 @@ export function AppList(): JSX.Element {
           value={query}
           onChange={setQuery}
           placeholder="Search apps by name, repo, package…"
+        />
+        <SegmentedControl
+          ariaLabel="Filter apps"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'installed', label: 'Installed' },
+            { value: 'updates', label: 'Updates available' }
+          ]}
         />
         <Button variant="primary" size="small" onClick={() => setAddOpen(true)}>
           Add app

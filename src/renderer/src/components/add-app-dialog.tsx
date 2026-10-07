@@ -3,36 +3,48 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { z } from 'zod'
-import type { AddAppInput } from '@core/index'
+import { formatRepoReference, parseRepoReference, type AddAppInput } from '@core/index'
 import { useActions } from '@renderer/src/hooks/use-actions'
 import { useSettings } from '@renderer/src/hooks/use-settings'
+import {
+  addAppDefaults,
+  defaultArchitectures,
+  defaultArchTypes
+} from '@renderer/src/lib/add-app-defaults'
+import { ArchSelect } from './arch-select'
+import { FilterPreview } from './filter-preview'
 import { useNotifications } from './notifications'
-import { Button, Checkbox, Dialog, SelectField, TextField } from './ui'
+import { Button, Checkbox, Dialog, IconButton, SelectField, TextField } from './ui'
 
 /** The add-app form shape, validated before it is mapped onto `AddAppInput`. */
 const AddAppFormSchema = z.object({
-  repoOwner: z.string().min(1, 'Repository owner is required'),
-  repoName: z.string().min(1, 'Repository name is required'),
+  repository: z
+    .string()
+    .min(1, 'Repository is required')
+    // Only run the parse check once something was typed, so an empty field
+    // reports a single "required" error rather than two.
+    .refine((value) => value.trim().length === 0 || parseRepoReference(value) !== null, {
+      message: 'Enter owner/name or a GitHub URL'
+    }),
   displayName: z.string().min(1, 'Display name is required'),
   assetFilterPattern: z.string(),
   tagPrefix: z.string().refine((value) => value === '' || /^[a-zA-Z0-9_-]+$/.test(value), {
     message: 'Use only letters, digits, hyphens and underscores'
   }),
-  architectures: z.string(),
+  architectures: z.array(z.string()),
   includePrerelease: z.boolean(),
   launchCommand: z.string(),
   packageName: z.string(),
   installType: z.string()
 })
 
-type FieldErrors = Partial<Record<keyof z.infer<typeof AddAppFormSchema>, string>>
-
-const DEFAULT_ARCHITECTURES = ['amd64', 'arm64', 'x86_64', 'arm', 'armhf', 'i386']
+type FormValues = z.infer<typeof AddAppFormSchema>
+type FieldErrors = Partial<Record<keyof FormValues, string>>
 
 /**
- * Install formats a tracked app may expect. Values match
- * `lib/models/install_type.dart`; an empty value means "let the app decide"
- * (the installer identifies the format from the release asset).
+ * Install formats a tracked app may expect. Values match the model's
+ * `InstallType`; an empty value means "let the app decide" (the installer
+ * identifies the format from the release asset).
  */
 const INSTALL_TYPE_OPTIONS = [
   { value: '', label: 'Not specified' },
@@ -48,25 +60,16 @@ const REQUIRED_MARKER = (
   </span>
 )
 
-const EMPTY_FORM = {
-  repoOwner: '',
-  repoName: '',
+const EMPTY_FORM: FormValues = {
+  repository: '',
   displayName: '',
   assetFilterPattern: '',
   tagPrefix: '',
-  architectures: '',
+  architectures: [],
   includePrerelease: false,
   launchCommand: '',
   packageName: '',
   installType: ''
-}
-
-/** Splits a comma-separated architecture list into trimmed, non-empty entries. */
-function parseArchitectures(value: string): string[] {
-  return value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0)
 }
 
 export type AddAppDialogProps = {
@@ -77,20 +80,40 @@ export type AddAppDialogProps = {
 /**
  * Dialog for tracking a new GitHub repository.
  *
- * Validates with Zod before calling `addApp`; the optional fields are only sent
- * when non-empty so the main process stores `null` rather than `""`. On a
- * failed submit the first invalid field is focused and a `role="alert"`
- * summary is announced; editing a field clears its own error.
+ * A single "Repository" field accepts an `owner/name` slug or a full GitHub URL
+ * and is parsed with `parseRepoReference`; the resolved parts are shown as
+ * helper text. Optional filter fields (asset pattern, tag prefix, architectures)
+ * are seeded from the user's settings and a derived asset filter, and a live
+ * {@link FilterPreview} shows what they match. Validation runs with Zod before
+ * calling `addApp`; the optional fields are only sent when non-empty so the main
+ * process stores `null` rather than `""`.
  */
 export function AddAppDialog({ open, onClose }: AddAppDialogProps): JSX.Element {
   const { addApp } = useActions()
   const { notify } = useNotifications()
   const { data: settings } = useSettings()
 
-  const [form, setForm] = useState(() => ({ ...EMPTY_FORM }))
+  const [form, setForm] = useState<FormValues>(() => ({ ...EMPTY_FORM }))
   const [errors, setErrors] = useState<FieldErrors>({})
   const formRef = useRef<HTMLFormElement>(null)
   const focusErrors = useRef(false)
+  const seeded = useRef(false)
+  // Once the user edits the display name themselves, stop overwriting it.
+  const displayNameEdited = useRef(false)
+
+  // Seed the defaults once the (async) settings arrive. The dialog is mounted
+  // fresh on each open, so this runs at most once per open.
+  useEffect(() => {
+    if (seeded.current || settings == null) return
+    seeded.current = true
+    const defaults = addAppDefaults(settings)
+    setForm((current) => ({
+      ...current,
+      architectures: defaults.architectures,
+      installType: defaults.installType,
+      assetFilterPattern: defaults.assetFilterPattern
+    }))
+  }, [settings])
 
   useEffect(() => {
     if (!focusErrors.current) return
@@ -98,15 +121,19 @@ export function AddAppDialog({ open, onClose }: AddAppDialogProps): JSX.Element 
     formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
   }, [errors])
 
-  const defaultArch = settings?.default_architecture
-  const architectureHint =
-    defaultArch != null && defaultArch.length > 0
-      ? `Comma-separated; defaults to ${defaultArch} when left blank`
-      : 'Comma-separated, e.g. amd64, arm64'
+  const parsedRepo = parseRepoReference(form.repository)
+  const repositoryHint =
+    parsedRepo != null
+      ? `Resolved: ${formatRepoReference(parsedRepo.owner, parsedRepo.name)}`
+      : 'owner/name or a GitHub URL'
+
+  // The architecture types the picker offers come straight from settings (Dart
+  // `_availableArchitectures`), so the add-app form pre-fills the arch type.
+  const archTypes = defaultArchTypes(settings)
 
   const errorCount = Object.keys(errors).length
 
-  function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]): void {
+  function update<K extends keyof FormValues>(key: K, value: FormValues[K]): void {
     setForm((current) => ({ ...current, [key]: value }))
     setErrors((current) => {
       if (!(key in current)) return current
@@ -116,10 +143,47 @@ export function AddAppDialog({ open, onClose }: AddAppDialogProps): JSX.Element 
     })
   }
 
+  /**
+   * Updates the repository field and, until the user has edited the display
+   * name themselves, auto-fills it with the parsed repo name.
+   */
+  function updateRepository(value: string): void {
+    setForm((current) => {
+      const parsed = parseRepoReference(value)
+      return {
+        ...current,
+        repository: value,
+        displayName:
+          parsed != null && !displayNameEdited.current ? parsed.name : current.displayName
+      }
+    })
+    setErrors((current) => {
+      if (!('repository' in current)) return current
+      const next = { ...current }
+      delete next.repository
+      return next
+    })
+  }
+
   function handleClose(): void {
     setForm({ ...EMPTY_FORM })
     setErrors({})
+    displayNameEdited.current = false
     onClose()
+  }
+
+  async function pasteRepository(): Promise<void> {
+    try {
+      // The session denies the `clipboard-read` permission, so the renderer
+      // cannot use `navigator.clipboard`; the main process reads it instead.
+      const text = (await window.autonex.readClipboardText()).trim()
+      // Normalise a pasted GitHub URL/slug to the canonical `owner/name`, but
+      // keep unparseable text verbatim so the user can see and fix it.
+      const parsed = parseRepoReference(text)
+      updateRepository(parsed != null ? formatRepoReference(parsed.owner, parsed.name) : text)
+    } catch {
+      notify({ tone: 'warning', message: 'Could not read the clipboard.' })
+    }
   }
 
   async function handleSubmit(): Promise<void> {
@@ -136,17 +200,19 @@ export function AddAppDialog({ open, onClose }: AddAppDialogProps): JSX.Element 
     }
     setErrors({})
 
-    const architectures = parseArchitectures(parsed.data.architectures)
+    const repo = parseRepoReference(parsed.data.repository)
+    if (repo == null) {
+      setErrors({ repository: 'Enter owner/name or a GitHub URL' })
+      return
+    }
+
+    const fallbackArchitectures = defaultArchitectures(settings)
     const resolvedArchitectures =
-      architectures.length > 0
-        ? architectures
-        : defaultArch != null && defaultArch.length > 0
-          ? [defaultArch]
-          : []
+      parsed.data.architectures.length > 0 ? parsed.data.architectures : fallbackArchitectures
 
     const input: AddAppInput = {
-      repoOwner: parsed.data.repoOwner.trim(),
-      repoName: parsed.data.repoName.trim(),
+      repoOwner: repo.owner,
+      repoName: repo.name,
       displayName: parsed.data.displayName.trim(),
       assetFilterPattern: parsed.data.assetFilterPattern.trim() || null,
       tagPrefix: parsed.data.tagPrefix.trim() || null,
@@ -201,24 +267,29 @@ export function AddAppDialog({ open, onClose }: AddAppDialogProps): JSX.Element 
             Please fix the {errorCount} highlighted field{errorCount > 1 ? 's' : ''} below.
           </div>
         ) : null}
-        <TextField
-          label="Repository owner"
-          labelAddon={REQUIRED_MARKER}
-          required
-          placeholder="owner"
-          value={form.repoOwner}
-          error={errors.repoOwner}
-          onChange={(event) => update('repoOwner', event.target.value)}
-        />
-        <TextField
-          label="Repository name"
-          labelAddon={REQUIRED_MARKER}
-          required
-          placeholder="repo"
-          value={form.repoName}
-          error={errors.repoName}
-          onChange={(event) => update('repoName', event.target.value)}
-        />
+        <div className="flex items-start gap-2">
+          <div className="flex-1">
+            <TextField
+              label="Repository"
+              labelAddon={REQUIRED_MARKER}
+              required
+              placeholder="owner/repo"
+              hint={repositoryHint}
+              value={form.repository}
+              error={errors.repository}
+              onChange={(event) => updateRepository(event.target.value)}
+            />
+          </div>
+          <div className="pt-5">
+            <IconButton
+              label="Paste from clipboard"
+              variant="default"
+              onClick={() => void pasteRepository()}
+            >
+              📋
+            </IconButton>
+          </div>
+        </div>
         <TextField
           label="Display name"
           labelAddon={REQUIRED_MARKER}
@@ -226,7 +297,10 @@ export function AddAppDialog({ open, onClose }: AddAppDialogProps): JSX.Element 
           placeholder="My App"
           value={form.displayName}
           error={errors.displayName}
-          onChange={(event) => update('displayName', event.target.value)}
+          onChange={(event) => {
+            displayNameEdited.current = true
+            update('displayName', event.target.value)
+          }}
         />
         <TextField
           label="Asset filter pattern"
@@ -243,13 +317,21 @@ export function AddAppDialog({ open, onClose }: AddAppDialogProps): JSX.Element 
           error={errors.tagPrefix}
           onChange={(event) => update('tagPrefix', event.target.value)}
         />
-        <TextField
-          label="Architectures"
-          hint={architectureHint}
-          placeholder={DEFAULT_ARCHITECTURES.slice(0, 3).join(', ')}
+        <ArchSelect
           value={form.architectures}
-          onChange={(event) => update('architectures', event.target.value)}
+          known={archTypes}
+          onChange={(architectures) => update('architectures', architectures)}
         />
+        {parsedRepo != null ? (
+          <FilterPreview
+            repoOwner={parsedRepo.owner}
+            repoName={parsedRepo.name}
+            includePrerelease={form.includePrerelease}
+            assetFilterPattern={form.assetFilterPattern}
+            tagPrefix={form.tagPrefix}
+            architectures={form.architectures}
+          />
+        ) : null}
         <TextField
           label="Launch command"
           hint="Optional; checked with which before being offered"

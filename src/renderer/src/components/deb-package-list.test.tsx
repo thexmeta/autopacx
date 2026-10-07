@@ -62,4 +62,34 @@ describe('DebPackageList', () => {
 
     await waitFor(() => expect(launchDeb).toHaveBeenCalledWith(pkg.toMap()))
   })
+
+  it('filters the rows to installed packages', async () => {
+    installMockApi({
+      getDebPackages: vi.fn().mockResolvedValue([
+        new TrackedDebPackage({
+          id: 1,
+          name: 'inst',
+          packageUrl: 'https://example.com/inst_1.0.0_amd64.deb',
+          displayName: 'Installed Pkg',
+          installedVersion: '1.0.0',
+          createdAt: new Date('2026-01-01T00:00:00Z')
+        }).toMap(),
+        new TrackedDebPackage({
+          id: 2,
+          name: 'fresh',
+          packageUrl: 'https://example.com/fresh_1.0.0_amd64.deb',
+          displayName: 'Fresh Pkg',
+          createdAt: new Date('2026-01-01T00:00:00Z')
+        }).toMap()
+      ])
+    })
+
+    renderWithProviders(<DebPackageList />)
+
+    await screen.findByText('Installed Pkg')
+    fireEvent.click(screen.getByRole('radio', { name: 'Installed' }))
+
+    expect(screen.getByText('Installed Pkg')).toBeInTheDocument()
+    expect(screen.queryByText('Fresh Pkg')).not.toBeInTheDocument()
+  })
 })

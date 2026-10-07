@@ -1,16 +1,23 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024 PlebOne
 
-import { useState, type JSX } from 'react'
+import { lazy, Suspense, useState, type JSX } from 'react'
 import type { InstallOptions } from '@core/index'
 import type { TrackedApp } from '@core/models/tracked-app'
 import { installTypeDisplayName } from '@core/models/install-type'
 import { useActions } from '@renderer/src/hooks/use-actions'
+import { formatDate } from '@renderer/src/lib/format-date'
 import { needsInstallTarget } from '@renderer/src/lib/install-options'
-import { InstallOptionsDialog } from './install-options-dialog'
+import { DialogFallback } from './lazy-dialog'
 import { useNotifications } from './notifications'
 import { InfoRow } from './info-row'
 import { Badge, Button, ConfirmDialog, Dialog } from './ui'
+
+// Split into its own chunk and fetched the first time it is opened, so the
+// shared install-options surface stays out of the main bundle.
+const InstallOptionsDialog = lazy(() =>
+  import('./install-options-dialog').then((module) => ({ default: module.InstallOptionsDialog }))
+)
 
 export type AppDetailsDialogProps = {
   open: boolean
@@ -95,6 +102,9 @@ export function AppDetailsDialog({
           </InfoRow>
           <InfoRow label="Installed">{app.installedVersion ?? 'Not installed'}</InfoRow>
           <InfoRow label="Latest">{app.latestVersion ?? 'Unknown'}</InfoRow>
+          <InfoRow label="Released">
+            {app.latestReleaseDate ? formatDate(app.latestReleaseDate) : 'Unknown'}
+          </InfoRow>
           <InfoRow label="Update status">
             {app.hasUpdate ? <Badge tone="warning">Update available</Badge> : 'Up to date'}
           </InfoRow>
@@ -161,15 +171,17 @@ export function AppDetailsDialog({
       />
 
       {optionsOpen ? (
-        <InstallOptionsDialog
-          app={app}
-          busy={installApp.isPending}
-          onCancel={() => setOptionsOpen(false)}
-          onConfirm={(options) => {
-            setOptionsOpen(false)
-            void install(options)
-          }}
-        />
+        <Suspense fallback={<DialogFallback />}>
+          <InstallOptionsDialog
+            app={app}
+            busy={installApp.isPending}
+            onCancel={() => setOptionsOpen(false)}
+            onConfirm={(options) => {
+              setOptionsOpen(false)
+              void install(options)
+            }}
+          />
+        </Suspense>
       ) : null}
     </>
   )

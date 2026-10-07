@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024 PlebOne
 
-import { lazy, Suspense, useMemo, useState, type JSX } from 'react'
+import { lazy, Suspense, useId, useMemo, useState, type JSX } from 'react'
 import {
   applyFilter,
   compareByName,
   type BatchOperationResultWire,
   type ItemFilter
 } from '@core/index'
-import type { TrackedDebPackage } from '@core/models/tracked-deb-package'
+import type { TrackedPacstallPackage } from '@core/models/tracked-pacstall-package'
 import { useActions } from '@renderer/src/hooks/use-actions'
-import { useDebPackages } from '@renderer/src/hooks/use-deb-packages'
+import {
+  usePacstallActions,
+  usePacstallPackages,
+  usePacstallStatus
+} from '@renderer/src/hooks/use-pacstall'
 import { BatchActionBar } from './batch-action-bar'
 import { DialogFallback } from './lazy-dialog'
 import { useNotifications } from './notifications'
@@ -25,22 +29,26 @@ import {
   Spinner
 } from './ui'
 
-// Detail/edit surfaces are split into their own chunks and fetched on demand.
-const DebDetailsDialog = lazy(() =>
-  import('./deb-details-dialog').then((module) => ({ default: module.DebDetailsDialog }))
-)
-const EditDebPackageDialog = lazy(() =>
-  import('./edit-deb-package-dialog').then((module) => ({
-    default: module.EditDebPackageDialog
+const PacstallDetailsDialog = lazy(() =>
+  import('./pacstall-details-dialog').then((module) => ({
+    default: module.PacstallDetailsDialog
   }))
 )
 
-function pkgKey(pkg: TrackedDebPackage): string {
-  return pkg.id != null ? `id:${pkg.id}` : `url:${pkg.packageUrl}`
+/**
+ * The pacstall install guide. Must be an allowlisted host (`github.com`),
+ * because `openExternal` refuses anything else.
+ */
+const PACSTALL_INSTALL_DOCS_URL = 'https://github.com/pacstall/pacstall'
+
+function pkgKey(pkg: TrackedPacstallPackage): string {
+  return pkg.id != null ? `id:${pkg.id}` : `name:${pkg.name}`
 }
 
-function searchText(pkg: TrackedDebPackage): string {
-  return [pkg.displayName ?? '', pkg.name, pkg.packageUrl].join(' ').toLowerCase()
+function searchText(pkg: TrackedPacstallPackage): string {
+  return [pkg.effectiveDisplayName, pkg.name, pkg.packageName ?? '', pkg.maintainer ?? '']
+    .join(' ')
+    .toLowerCase()
 }
 
 function summarizeResults(results: readonly BatchOperationResultWire[]): string {
@@ -50,34 +58,45 @@ function summarizeResults(results: readonly BatchOperationResultWire[]): string 
   return `${results.length - failed.length} succeeded, ${failed.length} failed.\n${details}`
 }
 
-type DebRowProps = {
-  pkg: TrackedDebPackage
+type PacstallRowProps = {
+  pkg: TrackedPacstallPackage
   multiSelect: boolean
   selected: boolean
+  /** False when pacstall is missing (or resolved to an unexpected path). */
+  canInstall: boolean
+  /** Points the disabled Install button at the banner that explains why. */
+  installHintId?: string
   onToggleSelected: () => void
   onOpenDetails: () => void
-  onEdit: () => void
   onDelete: () => void
 }
 
-function DebPackageRow({
+function PacstallPackageRow({
   pkg,
   multiSelect,
   selected,
+  canInstall,
+  installHintId,
   onToggleSelected,
   onOpenDetails,
-  onEdit,
   onDelete
-}: DebRowProps): JSX.Element {
-  const { installDeb, uninstallDeb, checkDebUpdate, launchDeb } = useActions()
+}: PacstallRowProps): JSX.Element {
+  const {
+    installPacstall,
+    uninstallPacstall,
+    updatePacstall,
+    checkPacstallUpdate,
+    launchPacstall
+  } = usePacstallActions()
   const [confirmingUninstall, setConfirmingUninstall] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
-  const installing = installDeb.isPending && installDeb.variables === pkg
-  const uninstalling = uninstallDeb.isPending && uninstallDeb.variables === pkg
-  const checking = checkDebUpdate.isPending && checkDebUpdate.variables === pkg
-  const launching = launchDeb.isPending && launchDeb.variables === pkg
-  const busy = installing || uninstalling || checking || launching
+  const installing = installPacstall.isPending && installPacstall.variables === pkg
+  const upgrading = updatePacstall.isPending && updatePacstall.variables === pkg
+  const uninstalling = uninstallPacstall.isPending && uninstallPacstall.variables === pkg
+  const checking = checkPacstallUpdate.isPending && checkPacstallUpdate.variables === pkg
+  const launching = launchPacstall.isPending && launchPacstall.variables === pkg
+  const busy = installing || upgrading || uninstalling || checking || launching
 
   return (
     <li className="bg-surface px-3 py-2">
@@ -99,10 +118,10 @@ function DebPackageRow({
           {pkg.effectiveDisplayName}
         </button>
         {pkg.hasUpdate ? <Badge tone="warning">Update available</Badge> : null}
-        <Badge tone="accent">Direct</Badge>
+        <Badge tone="accent">pacstall</Badge>
       </div>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
-        <span className="truncate">{pkg.filename || pkg.packageUrl}</span>
+        <span className="truncate">{pkg.name}</span>
         <span>Installed: {pkg.installedVersion ?? '—'}</span>
         <span className={pkg.hasUpdate ? 'font-semibold text-star' : undefined}>
           Latest: {pkg.latestVersion ?? '—'}
@@ -116,8 +135,9 @@ function DebPackageRow({
               variant="primary"
               size="small"
               aria-label={`Install ${pkg.effectiveDisplayName}`}
-              disabled={busy}
-              onClick={() => installDeb.mutate(pkg)}
+              aria-describedby={installHintId}
+              disabled={busy || !canInstall}
+              onClick={() => installPacstall.mutate(pkg)}
             >
               {installing ? 'Installing…' : 'Install'}
             </Button>
@@ -128,9 +148,9 @@ function DebPackageRow({
               size="small"
               aria-label={`Upgrade ${pkg.effectiveDisplayName}`}
               disabled={busy}
-              onClick={() => installDeb.mutate(pkg)}
+              onClick={() => updatePacstall.mutate(pkg)}
             >
-              {installing ? 'Upgrading…' : 'Upgrade'}
+              {upgrading ? 'Upgrading…' : 'Upgrade'}
             </Button>
           ) : null}
           {pkg.installedVersion ? (
@@ -140,7 +160,7 @@ function DebPackageRow({
                 size="small"
                 aria-label={`Launch ${pkg.effectiveDisplayName}`}
                 disabled={busy}
-                onClick={() => launchDeb.mutate(pkg)}
+                onClick={() => launchPacstall.mutate(pkg)}
               >
                 {launching ? 'Launching…' : 'Launch'}
               </Button>
@@ -160,13 +180,10 @@ function DebPackageRow({
             size="small"
             aria-label={`Check updates for ${pkg.effectiveDisplayName}`}
             disabled={busy}
-            onClick={() => checkDebUpdate.mutate(pkg)}
+            onClick={() => checkPacstallUpdate.mutate(pkg)}
           >
             {checking ? 'Checking…' : 'Check updates'}
           </Button>
-          <IconButton label={`Edit ${pkg.effectiveDisplayName}`} variant="ghost" onClick={onEdit}>
-            ✎
-          </IconButton>
           <IconButton
             label={`Delete ${pkg.effectiveDisplayName}`}
             variant="ghost"
@@ -185,7 +202,7 @@ function DebPackageRow({
         busy={uninstalling}
         onConfirm={() => {
           setConfirmingUninstall(false)
-          uninstallDeb.mutate(pkg)
+          uninstallPacstall.mutate(pkg)
         }}
         onCancel={() => setConfirmingUninstall(false)}
       />
@@ -204,18 +221,24 @@ function DebPackageRow({
   )
 }
 
-/** The tracked deb-package list with per-item actions, search and batch. */
-export function DebPackageList(): JSX.Element {
-  const { data, isPending, isError, error, refetch } = useDebPackages()
-  const { deleteDeb, batchInstall, batchDelete, batchUpdate } = useActions()
+/** The tracked pacstall list with per-item actions, search and batch. */
+export function PacstallPackageList(): JSX.Element {
+  const { data, isPending, isError, error, refetch } = usePacstallPackages()
+  const status = usePacstallStatus()
+  const { deletePacstall } = usePacstallActions()
+  const { batchInstall, batchDelete, batchUpdate, openExternal } = useActions()
   const { notify } = useNotifications()
 
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ItemFilter>('all')
   const [multiSelect, setMultiSelect] = useState(false)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
-  const [editPkg, setEditPkg] = useState<TrackedDebPackage | null>(null)
-  const [detailsPkg, setDetailsPkg] = useState<TrackedDebPackage | null>(null)
+  const [detailsPkg, setDetailsPkg] = useState<TrackedPacstallPackage | null>(null)
+
+  const pathUnexpected = status.data?.pathUnexpected === true
+  const showBanner = status.data != null && (!status.data.installed || pathUnexpected)
+  const canInstall = status.data != null && !showBanner
+  const bannerId = useId()
 
   const packages = useMemo(() => data ?? [], [data])
   const visiblePackages = useMemo(() => {
@@ -237,7 +260,7 @@ export function DebPackageList(): JSX.Element {
   const selectedPackages = visiblePackages.filter((pkg) => selectedKeys.has(pkgKey(pkg)))
   const batchBusy = batchInstall.isPending || batchDelete.isPending || batchUpdate.isPending
 
-  function toggleSelected(pkg: TrackedDebPackage): void {
+  function toggleSelected(pkg: TrackedPacstallPackage): void {
     const key = pkgKey(pkg)
     setSelectedKeys((current) => {
       const next = new Set(current)
@@ -265,7 +288,11 @@ export function DebPackageList(): JSX.Element {
     try {
       if (kind === 'delete') {
         const ids = selectedPackages.map((pkg) => pkg.id).filter((id): id is number => id != null)
-        const summary = await batchDelete.mutateAsync({ appIds: [], debIds: ids })
+        const summary = await batchDelete.mutateAsync({
+          appIds: [],
+          debIds: [],
+          pacstallIds: ids
+        })
         notify({
           tone: summary.failed > 0 ? 'warning' : 'success',
           message: `Removed ${summary.succeeded} package(s), ${summary.failed} failed.`
@@ -273,8 +300,16 @@ export function DebPackageList(): JSX.Element {
       } else {
         const results =
           kind === 'install'
-            ? await batchInstall.mutateAsync({ apps: [], debPackages: selectedPackages })
-            : await batchUpdate.mutateAsync({ apps: [], debPackages: selectedPackages })
+            ? await batchInstall.mutateAsync({
+                apps: [],
+                debPackages: [],
+                pacstallPackages: selectedPackages
+              })
+            : await batchUpdate.mutateAsync({
+                apps: [],
+                debPackages: [],
+                pacstallPackages: selectedPackages
+              })
         notify({
           tone: results.some((entry) => !entry.success) ? 'warning' : 'success',
           message: summarizeResults(results)
@@ -294,7 +329,7 @@ export function DebPackageList(): JSX.Element {
         className="flex items-center justify-center gap-2 py-16 text-sm text-muted"
       >
         <Spinner />
-        <span>Loading deb packages…</span>
+        <span>Loading pacstall packages…</span>
       </div>
     )
   }
@@ -302,7 +337,7 @@ export function DebPackageList(): JSX.Element {
   if (isError) {
     return (
       <EmptyState
-        title="Could not load deb packages"
+        title="Could not load pacstall packages"
         description={error?.message ?? 'An unexpected error occurred.'}
         action={
           <Button variant="default" size="small" onClick={() => void refetch()}>
@@ -315,14 +350,44 @@ export function DebPackageList(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col">
+      {showBanner ? (
+        <div
+          id={bannerId}
+          role="status"
+          className="mb-3 rounded-field border border-star/40 bg-star/10 px-3 py-2 text-xs text-star"
+        >
+          {pathUnexpected ? (
+            <p>
+              pacstall resolved to an unexpected path ({status.data?.path ?? 'unknown'}). AutoNex
+              only installs through <code>/usr/bin/pacstall</code>.
+            </p>
+          ) : (
+            <p>pacstall is not installed on this system.</p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              variant="default"
+              size="small"
+              onClick={() => void openExternal.mutateAsync(PACSTALL_INSTALL_DOCS_URL)}
+            >
+              How to install pacstall
+            </Button>
+            <Button
+              variant="ghost"
+              size="small"
+              disabled={status.isFetching}
+              onClick={() => void status.refetch()}
+            >
+              {status.isFetching ? 'Detecting…' : 'Detect again'}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-2 pb-3">
-        <SearchField
-          value={query}
-          onChange={setQuery}
-          placeholder="Search packages by name or URL…"
-        />
+        <SearchField value={query} onChange={setQuery} placeholder="Search pacstall packages…" />
         <SegmentedControl
-          ariaLabel="Filter deb packages"
+          ariaLabel="Filter pacstall packages"
           value={filter}
           onChange={setFilter}
           options={[
@@ -342,24 +407,25 @@ export function DebPackageList(): JSX.Element {
 
       {packages.length === 0 ? (
         <EmptyState
-          title="No deb packages tracked"
-          description="Track a direct .deb download URL to watch it for updates."
+          title="No pacstall packages tracked"
+          description="Install a package from Discover to track it here."
         />
       ) : visiblePackages.length === 0 ? (
         <EmptyState title={`No matches for “${query.trim()}”`} />
       ) : (
-        <ul className="flex-1 divide-y divide-border overflow-y-auto">
+        <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
           {visiblePackages.map((pkg) => (
-            <DebPackageRow
+            <PacstallPackageRow
               key={pkgKey(pkg)}
               pkg={pkg}
               multiSelect={multiSelect}
               selected={selectedKeys.has(pkgKey(pkg))}
+              canInstall={canInstall}
+              installHintId={showBanner ? bannerId : undefined}
               onToggleSelected={() => toggleSelected(pkg)}
               onOpenDetails={() => (multiSelect ? toggleSelected(pkg) : setDetailsPkg(pkg))}
-              onEdit={() => setEditPkg(pkg)}
               onDelete={() => {
-                if (pkg.id != null) deleteDeb.mutate(pkg.id)
+                if (pkg.id != null) deletePacstall.mutate(pkg.id)
               }}
             />
           ))}
@@ -379,14 +445,9 @@ export function DebPackageList(): JSX.Element {
         />
       ) : null}
 
-      {editPkg ? (
-        <Suspense fallback={<DialogFallback />}>
-          <EditDebPackageDialog open pkg={editPkg} onClose={() => setEditPkg(null)} />
-        </Suspense>
-      ) : null}
       {detailsPkg ? (
         <Suspense fallback={<DialogFallback />}>
-          <DebDetailsDialog open pkg={detailsPkg} onClose={() => setDetailsPkg(null)} />
+          <PacstallDetailsDialog open pkg={detailsPkg} onClose={() => setDetailsPkg(null)} />
         </Suspense>
       ) : null}
     </div>

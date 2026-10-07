@@ -4,6 +4,8 @@
 import { lazy, Suspense, useState, type JSX } from 'react'
 import { AppList } from './components/app-list'
 import { DebPackageList } from './components/deb-package-list'
+import { DiscoverView } from './components/discover-view'
+import { PacstallPackageList } from './components/pacstall-package-list'
 import { DialogFallback } from './components/lazy-dialog'
 import { IpcEventsProvider } from './hooks/use-ipc-events'
 import { NotificationViewport, NotificationsProvider } from './components/notifications'
@@ -27,6 +29,14 @@ const VIEW_COPY: Record<View, { title: string; description: string }> = {
   debs: {
     title: 'Deb packages',
     description: 'Direct .deb downloads watched for new versions.'
+  },
+  discover: {
+    title: 'Discover',
+    description: 'Search GitHub repositories or browse pacstall packages.'
+  },
+  pacstall: {
+    title: 'pacstall packages',
+    description: 'pacstall packages tracked through the registry.'
   }
 }
 
@@ -58,7 +68,15 @@ export function App(): JSX.Element {
             </header>
             <ProgressBanner />
             <div className="min-h-0 flex-1 overflow-hidden px-6 py-4">
-              {view === 'apps' ? <AppList /> : <DebPackageList />}
+              {view === 'apps' ? (
+                <AppList />
+              ) : view === 'debs' ? (
+                <DebPackageList />
+              ) : view === 'discover' ? (
+                <DiscoverView onOpenSettings={() => setSettingsOpen(true)} />
+              ) : (
+                <PacstallPackageList />
+              )}
             </div>
           </main>
         </div>

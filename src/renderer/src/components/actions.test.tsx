@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { TrackedApp, type TrackedAppInit } from '@core/models/tracked-app'
-import type { BatchProgressEvent } from '@core/index'
+import type { BatchProgressEvent, IpcEvent } from '@core/index'
 import { AppList } from './app-list'
 import { ProgressBanner } from './progress-banner'
 import { installMockApi, renderWithProviders } from '@renderer/src/test-utils'
@@ -52,7 +52,7 @@ describe('per-item actions', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Install App One' }))
 
-    const path = await screen.findByLabelText('Install path')
+    const path = await screen.findByLabelText('Custom path')
     fireEvent.change(path, { target: { value: '/usr/local/bin/repo' } })
     fireEvent.click(screen.getByRole('button', { name: 'Install' }))
 
@@ -139,6 +139,70 @@ describe('batch progress', () => {
     expect(bar).toHaveAttribute('aria-valuemax', '2')
     expect(screen.getByText('App One')).toBeInTheDocument()
   })
+
+  it('shows a labelled bar for a single operation and clears it when done', async () => {
+    const listeners: Array<(event: IpcEvent) => void> = []
+    const onEvent = vi.fn((listener: (event: IpcEvent) => void) => {
+      listeners.push(listener)
+      return () => {}
+    })
+    installMockApi({ onEvent })
+
+    renderWithProviders(<ProgressBanner />)
+
+    act(() => {
+      listeners[0]({
+        kind: 'operation',
+        method: 'installApp',
+        phase: 'downloading',
+        name: 'App One',
+        completed: 0,
+        total: 1
+      })
+    })
+
+    const bar = await screen.findByRole('progressbar')
+    expect(bar).toHaveAttribute('aria-label', 'Installing: App One')
+
+    act(() => {
+      listeners[0]({
+        kind: 'operation',
+        method: 'installApp',
+        phase: 'done',
+        name: 'App One',
+        completed: 1,
+        total: 1
+      })
+    })
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+  })
+
+  it('renders an indeterminate bar when an operation reports no total', async () => {
+    const listeners: Array<(event: IpcEvent) => void> = []
+    const onEvent = vi.fn((listener: (event: IpcEvent) => void) => {
+      listeners.push(listener)
+      return () => {}
+    })
+    installMockApi({ onEvent })
+
+    renderWithProviders(<ProgressBanner />)
+
+    act(() => {
+      listeners[0]({
+        kind: 'operation',
+        method: 'uninstallApp',
+        phase: 'removing',
+        name: 'App One',
+        completed: 0,
+        total: 0
+      })
+    })
+
+    const bar = await screen.findByRole('progressbar')
+    expect(bar).not.toHaveAttribute('aria-valuenow')
+    expect(bar).toHaveAttribute('aria-label', 'Uninstalling: App One')
+    expect(screen.getByText('Working…')).toBeInTheDocument()
+  })
 })
 
 describe('external links', () => {
@@ -162,6 +226,7 @@ describe('check all updates', () => {
     const checkAllUpdates = vi.fn().mockResolvedValue({
       apps: [wire],
       debPackages: [],
+      pacstallPackages: [],
       failures: [{ name: 'Broken', error: 'offline' }]
     })
     installMockApi({ getApps: vi.fn().mockResolvedValue([wire]), checkAllUpdates })
@@ -180,6 +245,7 @@ describe('check all updates', () => {
     const checkAllUpdates = vi.fn().mockResolvedValue({
       apps: [wire],
       debPackages: [],
+      pacstallPackages: [],
       failures: []
     })
     installMockApi({ getApps: vi.fn().mockResolvedValue([wire]), checkAllUpdates })

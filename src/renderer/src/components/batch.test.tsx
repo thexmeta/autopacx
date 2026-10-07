@@ -41,7 +41,7 @@ describe('batch selection', () => {
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
-    await waitFor(() => expect(batchDelete).toHaveBeenCalledWith([1, 2], []))
+    await waitFor(() => expect(batchDelete).toHaveBeenCalledWith([1, 2], [], []))
   })
 
   it('calls batchUpdate with the selected apps for a batch check', async () => {

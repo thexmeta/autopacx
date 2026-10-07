@@ -3,20 +3,28 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { z } from 'zod'
+import { formatRepoReference, parseRepoReference } from '@core/index'
 import type { TrackedApp } from '@core/models/tracked-app'
 import { useActions } from '@renderer/src/hooks/use-actions'
+import { ArchSelect } from './arch-select'
 import { useNotifications } from './notifications'
 import { Button, Checkbox, Dialog, TextField } from './ui'
 
 const EditAppFormSchema = z.object({
   displayName: z.string().min(1, 'Display name is required'),
-  repoOwner: z.string().min(1, 'Repository owner is required'),
-  repoName: z.string().min(1, 'Repository name is required'),
+  repository: z
+    .string()
+    .min(1, 'Repository is required')
+    // Only run the parse check once something was typed, so an empty field
+    // reports a single "required" error rather than two.
+    .refine((value) => value.trim().length === 0 || parseRepoReference(value) !== null, {
+      message: 'Enter owner/name or a GitHub URL'
+    }),
   assetFilterPattern: z.string(),
   tagPrefix: z.string().refine((value) => value === '' || /^[a-zA-Z0-9_-]+$/.test(value), {
     message: 'Use only letters, digits, hyphens and underscores'
   }),
-  architectures: z.string(),
+  architectures: z.array(z.string()),
   includePrerelease: z.boolean(),
   launchCommand: z.string(),
   packageName: z.string()
@@ -31,13 +39,6 @@ const REQUIRED_MARKER = (
   </span>
 )
 
-function parseArchitectures(value: string): string[] {
-  return value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0)
-}
-
 export type EditAppDialogProps = {
   open: boolean
   app: TrackedApp | null
@@ -51,11 +52,10 @@ export function EditAppDialog({ open, app, onClose }: EditAppDialogProps): JSX.E
 
   const [form, setForm] = useState(() => ({
     displayName: app?.displayName ?? '',
-    repoOwner: app?.repoOwner ?? '',
-    repoName: app?.repoName ?? '',
+    repository: app != null ? formatRepoReference(app.repoOwner, app.repoName) : '',
     assetFilterPattern: app?.assetFilterPattern ?? '',
     tagPrefix: app?.tagPrefix ?? '',
-    architectures: app?.architectures.join(', ') ?? '',
+    architectures: app?.architectures ?? [],
     includePrerelease: app?.includePrerelease ?? false,
     launchCommand: app?.launchCommand ?? '',
     packageName: app?.packageName ?? ''
@@ -71,6 +71,12 @@ export function EditAppDialog({ open, app, onClose }: EditAppDialogProps): JSX.E
   }, [errors])
 
   if (!open || app == null) return null
+
+  const parsedRepo = parseRepoReference(form.repository)
+  const repositoryHint =
+    parsedRepo != null
+      ? `Resolved: ${formatRepoReference(parsedRepo.owner, parsedRepo.name)}`
+      : 'owner/name or a GitHub URL'
 
   const errorCount = Object.keys(errors).length
 
@@ -98,13 +104,19 @@ export function EditAppDialog({ open, app, onClose }: EditAppDialogProps): JSX.E
     }
     setErrors({})
 
+    const repo = parseRepoReference(parsed.data.repository)
+    if (repo == null) {
+      setErrors({ repository: 'Enter owner/name or a GitHub URL' })
+      return
+    }
+
     const updated = app.copyWith({
       displayName: parsed.data.displayName.trim(),
-      repoOwner: parsed.data.repoOwner.trim(),
-      repoName: parsed.data.repoName.trim(),
+      repoOwner: repo.owner,
+      repoName: repo.name,
       assetFilterPattern: parsed.data.assetFilterPattern.trim() || null,
       tagPrefix: parsed.data.tagPrefix.trim() || null,
-      architectures: parseArchitectures(parsed.data.architectures),
+      architectures: parsed.data.architectures,
       includePrerelease: parsed.data.includePrerelease,
       launchCommand: parsed.data.launchCommand.trim() || null,
       packageName: parsed.data.packageName.trim() || null
@@ -167,20 +179,14 @@ export function EditAppDialog({ open, app, onClose }: EditAppDialogProps): JSX.E
           onChange={(event) => update('displayName', event.target.value)}
         />
         <TextField
-          label="Repository owner"
+          label="Repository"
           labelAddon={REQUIRED_MARKER}
           required
-          value={form.repoOwner}
-          error={errors.repoOwner}
-          onChange={(event) => update('repoOwner', event.target.value)}
-        />
-        <TextField
-          label="Repository name"
-          labelAddon={REQUIRED_MARKER}
-          required
-          value={form.repoName}
-          error={errors.repoName}
-          onChange={(event) => update('repoName', event.target.value)}
+          placeholder="owner/repo"
+          hint={repositoryHint}
+          value={form.repository}
+          error={errors.repository}
+          onChange={(event) => update('repository', event.target.value)}
         />
         <TextField
           label="Asset filter pattern"
@@ -193,11 +199,9 @@ export function EditAppDialog({ open, app, onClose }: EditAppDialogProps): JSX.E
           error={errors.tagPrefix}
           onChange={(event) => update('tagPrefix', event.target.value)}
         />
-        <TextField
-          label="Architectures"
-          hint="Comma-separated"
+        <ArchSelect
           value={form.architectures}
-          onChange={(event) => update('architectures', event.target.value)}
+          onChange={(architectures) => update('architectures', architectures)}
         />
         <TextField
           label="Launch command"

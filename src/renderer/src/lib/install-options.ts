@@ -40,3 +40,47 @@ function basename(filePath: string): string {
   const parts = filePath.split('/')
   return parts[parts.length - 1] ?? filePath
 }
+
+/** Strips trailing slashes so two spellings of a directory compare equal. */
+function trimTrailingSlashes(filePath: string): string {
+  return filePath.trim().replace(/\/+$/, '')
+}
+
+/**
+ * Joins a candidate directory and a binary name into a full target path,
+ * without pulling `node:path` into the renderer. A trailing slash on the
+ * directory is tolerated; an empty name yields `''` so the caller can fall back
+ * to "no explicit target".
+ */
+export function joinInstallTarget(dir: string, binaryName: string): string {
+  const name = binaryName.trim()
+  if (name.length === 0) return ''
+  const trimmedDir = trimTrailingSlashes(dir)
+  return trimmedDir.length === 0 ? name : `${trimmedDir}/${name}`
+}
+
+/**
+ * The final path component of a POSIX path. A path that ends in a slash (or is
+ * empty) has no basename, so it yields `''` — which is how a bare directory is
+ * detected.
+ */
+export function installTargetBasename(filePath: string): string {
+  const trimmed = filePath.trim()
+  if (trimmed.length === 0) return ''
+  return basename(trimmed)
+}
+
+/**
+ * Whether `candidatePath` is the directory named by `configuredDir`.
+ *
+ * The renderer has no `HOME`, so a `~`-prefixed configured path (e.g.
+ * `~/.local/bin`) matches any absolute candidate ending in that suffix.
+ */
+export function candidateMatchesDir(candidatePath: string, configuredDir: string): boolean {
+  const target = trimTrailingSlashes(configuredDir)
+  if (target.length === 0) return false
+  const candidate = trimTrailingSlashes(candidatePath)
+  if (candidate === target) return true
+  if (target.startsWith('~/')) return candidate.endsWith(`/${target.slice(2)}`)
+  return false
+}

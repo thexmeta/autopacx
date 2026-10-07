@@ -7,20 +7,28 @@ export type SearchFieldProps = {
   value: string
   onChange: (value: string) => void
   placeholder?: string
+  /** Accessible name for the input; defaults to "Search". */
+  label?: string
 }
 
-/** A compact search input with a clear button. */
+/**
+ * A compact search input with a clear button.
+ *
+ * `type="search"` already exposes the implicit `searchbox` role, so no explicit
+ * role is needed. The clear button is at least 24×24px (WCAG 2.5.8) while the
+ * field keeps its 32px height.
+ */
 export function SearchField({
   value,
   onChange,
-  placeholder = 'Search'
+  placeholder = 'Search',
+  label = 'Search'
 }: SearchFieldProps): JSX.Element {
   return (
     <div className="relative flex-1">
       <input
         type="search"
-        role="searchbox"
-        aria-label="Search"
+        aria-label={label}
         placeholder={placeholder}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -31,7 +39,7 @@ export function SearchField({
           type="button"
           aria-label="Clear search"
           onClick={() => onChange('')}
-          className="absolute right-1 top-1/2 -translate-y-1/2 rounded-field px-1.5 text-xs text-muted hover:text-text"
+          className="absolute right-1 top-1/2 inline-flex min-h-6 min-w-6 -translate-y-1/2 items-center justify-center rounded-field text-xs text-muted hover:text-text"
         >
           ✕
         </button>
