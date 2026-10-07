@@ -3,6 +3,10 @@
 
 import { APP_NAME, APP_VERSION } from '@core/index'
 import { matchesArchitecture, matchesGlobPattern } from '@core/glob-pattern'
+import type { GithubAssetOption } from '@core/github/asset-options'
+import { parseRepoSearch } from '@core/github/repo-search'
+import type { RepoSearchResult } from '@core/github/repo-search'
+import type { InstallType } from '@core/models/install-type'
 import type { Release, ReleaseAsset } from '@core/models/release'
 import { parseReleases } from '@core/models/release'
 import { createNodeHttpClient } from './http'
@@ -42,6 +46,12 @@ export interface GitHubServiceOptions {
   readonly getSettings?: () => Promise<Record<string, unknown>>
   /** Debug sink; a no-op by default so tests stay quiet. */
   readonly debugLog?: DebugLogSink
+  /**
+   * Classifies an asset filename into an install format. Production wiring
+   * passes the installer's `identifyAssetType`; the default rejects everything,
+   * so a mis-wired service offers no install options rather than guessing.
+   */
+  readonly identifyAssetType?: (filename: string) => InstallType | null
 }
 
 export interface GetLatestReleaseOptions {
@@ -56,6 +66,62 @@ export interface FilterAssetsOptions {
   readonly architectures?: readonly string[] | null
 }
 
+/** Sort keys accepted by `GET /search/repositories`. */
+export type RepoSearchSort = 'stars' | 'forks' | 'help-wanted-issues' | 'updated'
+
+export interface SearchRepositoriesOptions {
+  readonly sort?: RepoSearchSort | null
+  readonly order?: 'asc' | 'desc' | null
+  /** Results per page (GitHub caps this at 100). */
+  readonly perPage?: number | null
+  readonly page?: number | null
+}
+
+/**
+ * Raised when GitHub answers a search with 403/429, which for an authenticated
+ * search means the rate limit was hit. Carries the response's rate-limit hints
+ * so the UI can tell the user when to retry.
+ */
+export class GitHubRateLimitError extends Error {
+  readonly status: number
+  /** `Retry-After` header in seconds, or `null`. */
+  readonly retryAfter: number | null
+  /** `x-ratelimit-reset` header (epoch seconds), or `null`. */
+  readonly reset: number | null
+  /** `x-ratelimit-remaining` header, or `null`. */
+  readonly remaining: number | null
+
+  constructor(
+    status: number,
+    limits: {
+      readonly retryAfter: number | null
+      readonly reset: number | null
+      readonly remaining: number | null
+    }
+  ) {
+    // The reset/retry hints are folded into the message because Electron's
+    // structured clone drops custom Error properties when a rejection crosses
+    // IPC; the renderer parses them back out to show when to retry.
+    const hints = [`status ${status}`]
+    if (limits.reset != null) hints.push(`reset ${limits.reset}`)
+    if (limits.retryAfter != null) hints.push(`retry-after ${limits.retryAfter}`)
+    super(`GitHub search rate limit exceeded (${hints.join(', ')})`)
+    this.name = 'GitHubRateLimitError'
+    this.status = status
+    this.retryAfter = limits.retryAfter
+    this.reset = limits.reset
+    this.remaining = limits.remaining
+  }
+}
+
+/** Parses an integer response header, or `null` when absent/unparseable. */
+function integerHeader(headers: Readonly<Record<string, string>>, name: string): number | null {
+  const raw = headers[name]
+  if (raw == null || raw.trim().length === 0) return null
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
 /**
  * The latest release plus the asset chosen to install, ported from the
  * untyped map returned by `GitHubService.getLatestReleaseWithPackageInfo`.
@@ -65,6 +131,29 @@ export interface ReleasePackageInfo {
   readonly packageName: string | null
   readonly downloadUrl: string | null
   readonly releaseDate: string | null
+}
+
+/** The latest release's installable assets, for the package picker. */
+export interface GithubReleaseAssets {
+  readonly tagName: string | null
+  readonly assets: GithubAssetOption[]
+  /** ISO-8601 timestamp of the release, or `null` when it is unknown. */
+  readonly publishedAt: string | null
+  /**
+   * Every asset name that survived the requested glob/architecture filters,
+   * including non-installable ones (`.sha256`, `.txt`, …). Present only when a
+   * filter was supplied (the full-fidelity preview).
+   */
+  readonly matchedNames?: string[]
+  /** Total number of assets on the release, before any filtering. */
+  readonly totalAssets?: number
+}
+
+/** Rejects a blank or path-bearing repository owner/name before any request. */
+function assertValidRepoPart(value: string, label: 'owner' | 'name'): void {
+  if (value.trim().length === 0 || value !== value.trim() || /[/\\\s]/.test(value)) {
+    throw new Error(`Invalid repository ${label}: "${value}"`)
+  }
 }
 
 /**
@@ -80,6 +169,7 @@ export class GitHubService {
   private readonly timeoutMs: number
   private readonly getSettings: () => Promise<Record<string, unknown>>
   private readonly debugLog: DebugLogSink
+  private readonly identifyAssetType: (filename: string) => InstallType | null
 
   constructor(options: GitHubServiceOptions = {}) {
     this.http = options.httpClient ?? createNodeHttpClient()
@@ -87,6 +177,7 @@ export class GitHubService {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     this.getSettings = options.getSettings ?? (async () => ({}))
     this.debugLog = options.debugLog ?? (() => {})
+    this.identifyAssetType = options.identifyAssetType ?? (() => null)
   }
 
   /**
@@ -152,6 +243,55 @@ export class GitHubService {
   }
 
   /**
+   * Searches GitHub repositories. Ported from the Dart original's repository
+   * search, extended with the sort/order/page parameters the UI exposes.
+   *
+   * The request goes through the same private {@link request} as every other
+   * call, so it inherits the descriptive User-Agent, the `Authorization: Bearer`
+   * token from settings (when configured) and the `AbortController` timeout. A
+   * missing token simply means an unauthenticated, lower-rate-limit request.
+   *
+   * A 403/429 is mapped to a typed {@link GitHubRateLimitError} carrying the
+   * response's rate-limit headers, because GitHub signals throttling that way.
+   */
+  async searchRepositories(
+    query: string,
+    options: SearchRepositoriesOptions = {}
+  ): Promise<RepoSearchResult> {
+    const { sort, order, perPage, page } = options
+
+    const params = [`q=${encodeURIComponent(query)}`]
+    if (sort != null) params.push(`sort=${sort}`)
+    if (order != null) params.push(`order=${order}`)
+    if (perPage != null) params.push(`per_page=${perPage}`)
+    if (page != null) params.push(`page=${page}`)
+    const url = `${BASE_URL}/search/repositories?${params.join('&')}`
+
+    const response = await this.request(url)
+
+    if (response.status === 403 || response.status === 429) {
+      throw new GitHubRateLimitError(response.status, {
+        retryAfter: integerHeader(response.headers, 'retry-after'),
+        reset: integerHeader(response.headers, 'x-ratelimit-reset'),
+        remaining: integerHeader(response.headers, 'x-ratelimit-remaining')
+      })
+    }
+
+    if (response.status !== 200) {
+      throw new Error(`Failed to search repositories: ${response.status}`)
+    }
+
+    try {
+      return parseRepoSearch(JSON.parse(response.body))
+    } catch (error) {
+      throw new Error(
+        `Failed to search repositories: ${response.status} (malformed response: ${String(error)})`,
+        { cause: error }
+      )
+    }
+  }
+
+  /**
    * Returns the newest release that survives the release filters and has at
    * least one asset surviving the asset filters, with `assets` narrowed to the
    * matching subset. Returns `null` when nothing matches.
@@ -161,6 +301,19 @@ export class GitHubService {
     repo: string,
     options: GetLatestReleaseOptions = {}
   ): Promise<Release | null> {
+    return (await this.findLatestMatchingRelease(owner, repo, options))?.release ?? null
+  }
+
+  /**
+   * The newest release surviving the release filters that has at least one
+   * asset surviving the asset filters, together with the release's *pre-filter*
+   * asset count (which the narrowed copy loses).
+   */
+  private async findLatestMatchingRelease(
+    owner: string,
+    repo: string,
+    options: GetLatestReleaseOptions
+  ): Promise<{ release: Release; totalAssets: number } | null> {
     const { assetFilterPattern, tagPrefix, architectures, includePrerelease = false } = options
 
     const releases = await this.getReleases(owner, repo)
@@ -177,7 +330,10 @@ export class GitHubService {
     for (const release of filteredReleases) {
       const filteredAssets = this.filterAssets(release, { assetFilterPattern, architectures })
       if (filteredAssets.length > 0) {
-        return release.copyWith({ assets: filteredAssets })
+        return {
+          release: release.copyWith({ assets: filteredAssets }),
+          totalAssets: release.assets.length
+        }
       }
     }
 
@@ -230,6 +386,87 @@ export class GitHubService {
       downloadUrl: bestAsset?.browserDownloadUrl ?? null,
       releaseDate: release.publishedAt?.toISOString() ?? null
     }
+  }
+
+  /**
+   * Fetches the latest release's installable assets for the package picker.
+   *
+   * Without filters this applies no asset or architecture narrowing: the
+   * renderer lists every installable asset and the user (or the auto-pick)
+   * chooses one. Assets whose format the installer does not recognise are
+   * omitted, so every returned option is installable.
+   *
+   * With filters (`assetFilterPattern`/`tagPrefix`/`architectures`) the release
+   * is resolved through the same glob+architecture logic the installer uses
+   * ({@link getLatestRelease}), and the result additionally carries
+   * `matchedNames` (every asset surviving the filters, installable or not) and
+   * `totalAssets` (the release's asset count before filtering) for a
+   * full-fidelity preview.
+   */
+  async getGithubReleaseAssets(
+    owner: string,
+    repo: string,
+    options: {
+      readonly includePrerelease?: boolean
+      readonly assetFilterPattern?: string
+      readonly tagPrefix?: string
+      readonly architectures?: readonly string[]
+    } = {}
+  ): Promise<GithubReleaseAssets> {
+    assertValidRepoPart(owner, 'owner')
+    assertValidRepoPart(repo, 'name')
+
+    const hasFilters =
+      (options.assetFilterPattern != null && options.assetFilterPattern.length > 0) ||
+      (options.tagPrefix != null && options.tagPrefix.trim().length > 0) ||
+      (options.architectures != null && options.architectures.length > 0)
+
+    if (hasFilters) {
+      const match = await this.findLatestMatchingRelease(owner, repo, {
+        assetFilterPattern: options.assetFilterPattern ?? null,
+        tagPrefix: options.tagPrefix ?? null,
+        architectures: options.architectures ?? null,
+        includePrerelease: options.includePrerelease === true
+      })
+      if (match === null) return { tagName: null, assets: [], publishedAt: null }
+
+      const { release, totalAssets } = match
+      const assets = this.installableAssets(release)
+      return {
+        tagName: release.tagName,
+        assets,
+        publishedAt: release.publishedAt?.toISOString() ?? null,
+        matchedNames: release.assets.map((asset) => asset.name),
+        totalAssets
+      }
+    }
+
+    const releases = await this.getReleases(owner, repo)
+    const release =
+      releases.find((entry) => options.includePrerelease === true || !entry.prerelease) ?? null
+    if (release === null) return { tagName: null, assets: [], publishedAt: null }
+
+    return {
+      tagName: release.tagName,
+      assets: this.installableAssets(release),
+      publishedAt: release.publishedAt?.toISOString() ?? null
+    }
+  }
+
+  /** The release's assets whose format the installer recognises, as wire options. */
+  private installableAssets(release: Release): GithubAssetOption[] {
+    const assets: GithubAssetOption[] = []
+    for (const asset of release.assets) {
+      const installType = this.identifyAssetType(asset.name)
+      if (installType === null) continue
+      assets.push({
+        name: asset.name,
+        size: asset.size,
+        downloadUrl: asset.browserDownloadUrl,
+        installType
+      })
+    }
+    return assets
   }
 
   /**

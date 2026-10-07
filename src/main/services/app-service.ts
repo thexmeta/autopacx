@@ -26,32 +26,63 @@ export class AppService {
 
   async install(app: TrackedApp, options: InstallOptions): Promise<TrackedApp> {
     const { github, installer, repo } = this.deps
-    const info = await github.getLatestReleaseWithPackageInfo(app.repoOwner, app.repoName, {
-      assetFilterPattern: app.assetFilterPattern,
-      tagPrefix: app.tagPrefix,
-      architectures: app.architectures,
-      includePrerelease: app.includePrerelease
-    })
-    if (info === null || info.packageName === null || info.downloadUrl === null) {
-      throw new Error(`No installable asset found for ${app.displayName}`)
+
+    const assetName = options.assetName ?? null
+    let packageName: string
+    let downloadUrl: string
+    let tagName: string
+    let publishedAt: Date | null
+
+    if (assetName != null && assetName.length > 0) {
+      // An explicit choice bypasses the auto-pick: look the asset up by its
+      // exact name in the latest release. No asset/architecture filters are
+      // applied, because the user's pick is authoritative.
+      const release = await github.getLatestRelease(app.repoOwner, app.repoName, {
+        includePrerelease: app.includePrerelease
+      })
+      const asset = release?.assets.find((entry) => entry.name === assetName) ?? null
+      if (release === null || asset === null) {
+        throw new Error(
+          `Selected package "${assetName}" is no longer available for ${app.displayName}`
+        )
+      }
+      packageName = asset.name
+      downloadUrl = asset.browserDownloadUrl
+      tagName = release.tagName
+      publishedAt = release.publishedAt
+    } else {
+      const info = await github.getLatestReleaseWithPackageInfo(app.repoOwner, app.repoName, {
+        assetFilterPattern: app.assetFilterPattern,
+        tagPrefix: app.tagPrefix,
+        architectures: app.architectures,
+        includePrerelease: app.includePrerelease
+      })
+      if (info === null || info.packageName === null || info.downloadUrl === null) {
+        throw new Error(`No installable asset found for ${app.displayName}`)
+      }
+      packageName = info.packageName
+      downloadUrl = info.downloadUrl
+      tagName = info.release.tagName
+      publishedAt = info.release.publishedAt
     }
 
-    const type = installer.identifyAssetType(info.packageName, { app })
+    const type = installer.identifyAssetType(packageName, { app })
     if (type === null) {
       throw new Error(`No installable asset found for ${app.displayName}`)
     }
 
-    const file = await installer.downloadFile(info.downloadUrl, info.packageName)
+    const file = await installer.downloadFile(downloadUrl, packageName)
     const result = await installer.installPackage(file, type, {
       targetPath: options.targetPath ?? null,
       binaryName: options.binaryName ?? null
     })
 
     const updated = app.copyWith({
-      installedVersion: info.release.tagName,
+      installedVersion: tagName,
       installType: type,
       launchCommand: result.launchCommand,
       packageName: result.packageName,
+      latestReleaseDate: publishedAt ?? app.latestReleaseDate,
       lastChecked: new Date()
     })
     await repo.updateApp(updated)

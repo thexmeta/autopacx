@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { InstallType } from '@core/models/install-type'
-import { Release } from '@core/models/release'
+import { Release, ReleaseAsset } from '@core/models/release'
 import { TrackedApp } from '@core/models/tracked-app'
 import { AppService } from './app-service'
 import type { ExternalCheckerLike, GitHubLike, InstallerLike, TrackedStoreLike } from './ports'
@@ -40,9 +40,16 @@ function makeService(init: { apps?: TrackedApp[] } = {}) {
       apps = [...next]
     },
     readDebPackages: async () => [],
-    writeDebPackages: async () => undefined
+    writeDebPackages: async () => undefined,
+    readPacstallPackages: async () => [],
+    writePacstallPackages: async () => undefined
   }
-  const github: GitHubLike = { getLatestReleaseWithPackageInfo: vi.fn() }
+  const github: GitHubLike = {
+    getLatestRelease: vi.fn(),
+    getLatestReleaseWithPackageInfo: vi.fn(),
+    getGithubReleaseAssets: vi.fn(),
+    searchRepositories: vi.fn()
+  }
   const installer: InstallerLike = {
     identifyAssetType: vi.fn(),
     downloadFile: vi.fn(),
@@ -88,11 +95,113 @@ describe('AppService.install', () => {
     expect(h.getApps()[0]?.installedVersion).toBe('v2.0.0')
   })
 
+  it('persists the release publish date on install', async () => {
+    const h = makeService({ apps: [trackedApp()] })
+    vi.mocked(h.github.getLatestReleaseWithPackageInfo).mockResolvedValue({
+      release: release('v2.0.0'),
+      packageName: 'app.deb',
+      downloadUrl: 'https://example.com/app.deb',
+      releaseDate: null
+    })
+    vi.mocked(h.installer.identifyAssetType).mockReturnValue(InstallType.deb)
+    vi.mocked(h.installer.downloadFile).mockResolvedValue('/tmp/app.deb')
+    vi.mocked(h.installer.installPackage).mockResolvedValue({
+      launchCommand: '/usr/bin/app',
+      packageName: 'app'
+    })
+
+    const updated = await h.service.install(trackedApp(), {})
+
+    expect(updated.latestReleaseDate).toEqual(new Date('2026-02-01T00:00:00Z'))
+    expect(h.getApps()[0]?.latestReleaseDate).toEqual(new Date('2026-02-01T00:00:00Z'))
+  })
+
+  it('persists the release publish date when installing a chosen asset', async () => {
+    const h = makeService({ apps: [trackedApp()] })
+    vi.mocked(h.github.getLatestRelease).mockResolvedValue(
+      new Release({
+        tagName: 'v2.0.0',
+        prerelease: false,
+        draft: false,
+        publishedAt: new Date('2026-02-01T00:00:00Z'),
+        assets: [
+          new ReleaseAsset({
+            name: 'app-amd64.deb',
+            browserDownloadUrl: 'https://example.com/amd64.deb',
+            contentType: 'application/octet-stream',
+            size: 1
+          })
+        ]
+      })
+    )
+    vi.mocked(h.installer.identifyAssetType).mockReturnValue(InstallType.deb)
+    vi.mocked(h.installer.downloadFile).mockResolvedValue('/tmp/app-amd64.deb')
+    vi.mocked(h.installer.installPackage).mockResolvedValue({
+      launchCommand: null,
+      packageName: 'app'
+    })
+
+    const updated = await h.service.install(trackedApp(), { assetName: 'app-amd64.deb' })
+
+    expect(updated.latestReleaseDate).toEqual(new Date('2026-02-01T00:00:00Z'))
+    expect(h.getApps()[0]?.latestReleaseDate).toEqual(new Date('2026-02-01T00:00:00Z'))
+  })
+
   it('throws when no installable asset is found', async () => {
     const h = makeService({ apps: [trackedApp()] })
     vi.mocked(h.github.getLatestReleaseWithPackageInfo).mockResolvedValue(null)
 
     await expect(h.service.install(trackedApp(), {})).rejects.toThrow(/No installable asset/)
+  })
+
+  it('downloads the explicitly chosen asset instead of the auto-pick', async () => {
+    const h = makeService({ apps: [trackedApp()] })
+    vi.mocked(h.github.getLatestRelease).mockResolvedValue(
+      new Release({
+        tagName: 'v2.0.0',
+        prerelease: false,
+        draft: false,
+        publishedAt: new Date('2026-02-01T00:00:00Z'),
+        assets: [
+          new ReleaseAsset({
+            name: 'app-amd64.deb',
+            browserDownloadUrl: 'https://example.com/amd64.deb',
+            contentType: 'application/octet-stream',
+            size: 1
+          }),
+          new ReleaseAsset({
+            name: 'app-arm64.deb',
+            browserDownloadUrl: 'https://example.com/arm64.deb',
+            contentType: 'application/octet-stream',
+            size: 1
+          })
+        ]
+      })
+    )
+    vi.mocked(h.installer.identifyAssetType).mockReturnValue(InstallType.deb)
+    vi.mocked(h.installer.downloadFile).mockResolvedValue('/tmp/app-arm64.deb')
+    vi.mocked(h.installer.installPackage).mockResolvedValue({
+      launchCommand: null,
+      packageName: 'app'
+    })
+
+    const updated = await h.service.install(trackedApp(), { assetName: 'app-arm64.deb' })
+
+    expect(h.github.getLatestReleaseWithPackageInfo).not.toHaveBeenCalled()
+    expect(h.installer.downloadFile).toHaveBeenCalledWith(
+      'https://example.com/arm64.deb',
+      'app-arm64.deb'
+    )
+    expect(updated.installedVersion).toBe('v2.0.0')
+  })
+
+  it('throws when the chosen asset is no longer available', async () => {
+    const h = makeService({ apps: [trackedApp()] })
+    vi.mocked(h.github.getLatestRelease).mockResolvedValue(null)
+
+    await expect(h.service.install(trackedApp(), { assetName: 'gone.deb' })).rejects.toThrow(
+      /gone\.deb/
+    )
   })
 })
 

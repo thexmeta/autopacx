@@ -3,6 +3,7 @@
 
 import type { TrackedApp } from '@core/models/tracked-app'
 import type { TrackedDebPackage } from '@core/models/tracked-deb-package'
+import type { TrackedPacstallPackage } from '@core/models/tracked-pacstall-package'
 import type { TrackedStoreLike } from './ports'
 
 function maxId(items: readonly { readonly id: number | null }[]): number {
@@ -97,6 +98,48 @@ export class TrackedRepository {
     const packages = await this.store.readDebPackages()
     const remaining = packages.filter((pkg) => pkg.id == null || !ids.includes(pkg.id))
     await this.store.writeDebPackages(remaining)
+    return packages.length - remaining.length
+  }
+
+  // --- Pacstall packages ----------------------------------------------------
+
+  listPacstallPackages(): Promise<TrackedPacstallPackage[]> {
+    return this.store.readPacstallPackages()
+  }
+
+  /** Appends `pkg` with the next free id and returns that id. */
+  async appendPacstallPackage(pkg: TrackedPacstallPackage): Promise<number> {
+    const packages = await this.store.readPacstallPackages()
+    const id = maxId(packages) + 1
+    await this.store.writePacstallPackages([...packages, pkg.copyWith({ id })])
+    return id
+  }
+
+  /** Replaces the stored package with the same id; throws when it is missing. */
+  async updatePacstallPackage(pkg: TrackedPacstallPackage): Promise<void> {
+    if (pkg.id == null) {
+      throw new Error('Cannot update a pacstall package without an id')
+    }
+    const packages = await this.store.readPacstallPackages()
+    const index = packages.findIndex((existing) => existing.id === pkg.id)
+    if (index === -1) {
+      throw new Error(`Pacstall package with id ${pkg.id} not found`)
+    }
+    packages[index] = pkg
+    await this.store.writePacstallPackages(packages)
+  }
+
+  /** Removes the pacstall package with `id` (a no-op when it is not tracked). */
+  async deletePacstallPackage(id: number): Promise<void> {
+    const packages = await this.store.readPacstallPackages()
+    await this.store.writePacstallPackages(packages.filter((pkg) => pkg.id !== id))
+  }
+
+  /** Removes every package whose id is in `ids`; returns how many were removed. */
+  async deletePacstallPackages(ids: readonly number[]): Promise<number> {
+    const packages = await this.store.readPacstallPackages()
+    const remaining = packages.filter((pkg) => pkg.id == null || !ids.includes(pkg.id))
+    await this.store.writePacstallPackages(remaining)
     return packages.length - remaining.length
   }
 }

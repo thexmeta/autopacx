@@ -9,14 +9,18 @@ import type { Settings } from '@core/api'
 import { formatDartLocalIso } from '@core/internal/date'
 import { TrackedApp } from '@core/models/tracked-app'
 import { TrackedDebPackage } from '@core/models/tracked-deb-package'
+import { TrackedPacstallPackage } from '@core/models/tracked-pacstall-package'
+import { compareByName } from '@core/tracked-order'
 
 export const APPS_FILE = 'apps.json'
 export const DEB_PACKAGES_FILE = 'deb_packages.json'
+export const PACSTALL_PACKAGES_FILE = 'pacstall_packages.json'
 export const SETTINGS_FILE = 'settings.json'
 
 /** Date fields serialised as Dart-local ISO strings, per file. */
 const APP_DATE_KEYS = ['created_at', 'last_checked', 'latest_release_date'] as const
 const DEB_DATE_KEYS = ['created_at', 'last_checked', 'file_date'] as const
+const PACSTALL_DATE_KEYS = ['created_at', 'last_checked'] as const
 
 interface CorruptRecord {
   readonly backupPath: string | null
@@ -58,9 +62,9 @@ export class JsonStore {
 
   async readApps(): Promise<TrackedApp[]> {
     const apps = await this.readList(APPS_FILE, (item) => TrackedApp.fromMap(item))
-    return apps.sort((a, b) =>
-      a.displayName < b.displayName ? -1 : a.displayName > b.displayName ? 1 : 0
-    )
+    // Case-insensitive so capitals do not split the list into two sections
+    // (the raw `<`/`>` UTF-16 comparison placed every capitalised name first).
+    return apps.sort(compareByName)
   }
 
   async writeApps(apps: readonly TrackedApp[]): Promise<void> {
@@ -80,6 +84,19 @@ export class JsonStore {
     await this.writeJson(
       DEB_PACKAGES_FILE,
       packages.map((pkg) => toDartWire(pkg.toMap(), DEB_DATE_KEYS))
+    )
+  }
+
+  // --- Pacstall packages ----------------------------------------------------
+
+  async readPacstallPackages(): Promise<TrackedPacstallPackage[]> {
+    return this.readList(PACSTALL_PACKAGES_FILE, (item) => TrackedPacstallPackage.fromMap(item))
+  }
+
+  async writePacstallPackages(packages: readonly TrackedPacstallPackage[]): Promise<void> {
+    await this.writeJson(
+      PACSTALL_PACKAGES_FILE,
+      packages.map((pkg) => toDartWire(pkg.toMap(), PACSTALL_DATE_KEYS))
     )
   }
 

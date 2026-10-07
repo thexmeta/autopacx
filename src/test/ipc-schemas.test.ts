@@ -4,11 +4,13 @@
 import { describe, expect, it } from 'vitest'
 import { TrackedApp } from '@core/models/tracked-app'
 import { TrackedDebPackage } from '@core/models/tracked-deb-package'
+import { TrackedPacstallPackage } from '@core/models/tracked-pacstall-package'
 import {
   NoArgs,
   SettingsSchema,
   TrackedAppSchema,
   TrackedDebPackageSchema,
+  TrackedPacstallPackageSchema,
   VersionSchema
 } from '../main/ipc-schemas'
 
@@ -69,10 +71,28 @@ describe('result schemas', () => {
     expect(TrackedDebPackageSchema.safeParse({ id: 1 }).success).toBe(false)
   })
 
+  it('accepts a TrackedPacstallPackage wire map produced by toMap()', () => {
+    const pkg = new TrackedPacstallPackage({
+      id: 1,
+      name: 'neovim',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      registryRepo: 'pacstall/pacstall-programs'
+    })
+
+    expect(TrackedPacstallPackageSchema.safeParse(pkg.toMap()).success).toBe(true)
+  })
+
+  it('rejects a TrackedPacstallPackage missing required fields', () => {
+    expect(TrackedPacstallPackageSchema.safeParse({ id: 1 }).success).toBe(false)
+  })
+
   it('accepts a settings record and a version string', () => {
     expect(SettingsSchema.safeParse({ theme: 'dark', github_releases_per_page: 50 }).success).toBe(
       true
     )
+    expect(
+      SettingsSchema.safeParse({ pacstall_enabled: true, github_search_sort: 'stars' }).success
+    ).toBe(true)
     expect(VersionSchema.safeParse('0.1.0').success).toBe(true)
     expect(VersionSchema.safeParse(1).success).toBe(false)
   })

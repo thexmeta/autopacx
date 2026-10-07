@@ -196,7 +196,7 @@ function defaultAppSupportDirectory(): Promise<string> {
  * both output streams. Rejects on spawn failure, matching Dart's `Process.run`
  * throwing a `ProcessException` for a missing executable.
  */
-function defaultPrivilegedProcessRunner(
+export function defaultPrivilegedProcessRunner(
   executable: string,
   args: readonly string[],
   options: PrivilegedRunOptions = {}
@@ -1030,7 +1030,9 @@ export class InstallerService {
         'Uninstall is not supported for snap; remove it with ' +
           `"snap remove ${app.packageName ?? '<package-name>'}".`
       )
-    } else if (type === InstallType.binary || type === InstallType.source) {
+    } else if (type === InstallType.binary) {
+      await this.uninstallBinary(app)
+    } else if (type === InstallType.source) {
       throw new Error(
         `Uninstall is not supported for ${type}; remove it with the ` +
           'same method used to install it.'
@@ -1045,6 +1047,109 @@ export class InstallerService {
       await this.runPrivileged('dpkg-remove', [pkg.packageName])
     } else {
       throw new Error('Uninstall not supported for this package (missing package name)')
+    }
+  }
+
+  /**
+   * Uninstalls a binary installed by {@link installBinary}.
+   *
+   * The installed path is the app's stored `launchCommand`. When the install
+   * replaced an existing file, that file was saved as `<target>.bak` beside the
+   * target (or, if even a privileged copy beside it failed, under the app-data
+   * `binary_backups/` directory); uninstalling puts the saved file back, so
+   * removing an app never destroys a binary it overwrote. A missing target with
+   * no backup is a no-op, so uninstalling twice is safe.
+   */
+  private async uninstallBinary(app: TrackedApp): Promise<void> {
+    const target = app.launchCommand?.trim()
+    if (target == null || target.length === 0) {
+      throw new Error('Cannot uninstall this binary: no installed path is stored for this app.')
+    }
+
+    const backup = await this.binaryBackupPath(target)
+    const targetExists = await fileExists(target)
+    if (!targetExists && backup == null) return
+
+    const targetDirWritable = await InstallLocationResolver.isDirWritable(path.dirname(target))
+    if (targetDirWritable) {
+      if (backup != null) {
+        await this.restoreBinaryBackup(backup, target, true)
+      } else {
+        await fs.rm(target, { force: true })
+      }
+      return
+    }
+
+    // The target directory is root-owned: removal and any restore go through
+    // the helper, whose `binary-remove` verb validates the path against the
+    // install allowlist.
+    if (targetExists) await this.runPrivileged('binary-remove', [target])
+    if (backup != null) await this.restoreBinaryBackup(backup, target, false)
+  }
+
+  /** Path of the file the last install replaced, or null when there is none. */
+  private async binaryBackupPath(target: string): Promise<string | null> {
+    const beside = `${target}.bak`
+    if (await fileExists(beside)) return beside
+    const dataDir = await this.appSupportDirectory()
+    const appDataBackup = path.join(
+      dataDir,
+      'binary_backups',
+      InstallerService.appDataBackupName(target)
+    )
+    return (await fileExists(appDataBackup)) ? appDataBackup : null
+  }
+
+  /**
+   * Puts `backup` back at `target` and removes the consumed backup.
+   *
+   * On a writable target directory a sibling backup is renamed into place
+   * (atomic, and its mode is preserved); a backup that lives elsewhere is
+   * copied. When the target directory is not writable the backup is staged in
+   * the app's private directory and moved into place by the helper's
+   * `atomic-install`, one privileged call; the sibling backup itself is then
+   * dropped with `binary-remove`.
+   */
+  private async restoreBinaryBackup(
+    backup: string,
+    target: string,
+    targetDirWritable: boolean
+  ): Promise<void> {
+    const beside = backup === `${target}.bak`
+    if (targetDirWritable && beside) {
+      await fs.rename(backup, target)
+      return
+    }
+    if (targetDirWritable) {
+      await fs.copyFile(backup, target)
+      await fs.chmod(target, 0o755)
+      await fs.rm(backup, { force: true })
+      return
+    }
+
+    const stagingDir = await this.stagingDir()
+    const staging = path.join(
+      stagingDir,
+      `${path.basename(target)}.${process.pid}.${randomBytes(8).toString('hex')}.restore`
+    )
+    try {
+      await fs.copyFile(backup, staging)
+      await this.runPrivileged('atomic-install', [staging, target])
+    } finally {
+      await this.removeIfPresent(staging)
+    }
+    if (beside) {
+      try {
+        await this.runPrivileged('binary-remove', [backup])
+      } catch (error) {
+        // The binary is already restored; a leftover backup must not fail it.
+        await this.log(
+          'InstallerService',
+          `Could not remove binary backup ${backup}: ${errorMessage(error)}`
+        )
+      }
+    } else {
+      await fs.rm(backup, { force: true })
     }
   }
 

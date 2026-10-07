@@ -28,7 +28,12 @@ export const HELPER_VERBS = [
   'dpkg-remove',
   'rpm-remove',
   'atomic-install',
+  'pacstall-install',
+  'pacstall-remove',
+  'pacstall-upgrade',
+  'pacstall-upgrade-all',
   'backup',
+  'binary-remove',
   'cleanup'
 ] as const
 
@@ -144,12 +149,20 @@ export function validateHelperInvocation(
     }
 
     case 'dpkg-remove':
-    case 'rpm-remove': {
+    case 'rpm-remove':
+    case 'pacstall-install':
+    case 'pacstall-remove':
+    case 'pacstall-upgrade': {
       if (args.length !== 1) return `${verb} expects exactly one package name`
       const [packageName] = args
       if (!PACKAGE_NAME_PATTERN.test(packageName)) {
         return `${verb} received an invalid package name`
       }
+      return null
+    }
+
+    case 'pacstall-upgrade-all': {
+      if (args.length !== 0) return 'pacstall-upgrade-all takes no arguments'
       return null
     }
 
@@ -176,6 +189,18 @@ export function validateHelperInvocation(
       }
       if (!isUnderAny(policy.installRoots, filePath)) {
         return 'backup path is outside the allowed install directories'
+      }
+      return null
+    }
+
+    case 'binary-remove': {
+      if (args.length !== 1) return 'binary-remove expects exactly one path'
+      const [filePath] = args
+      if (!isAbsoluteWithoutLeadingDash(filePath)) {
+        return 'binary-remove path must be an absolute path'
+      }
+      if (!isUnderAny(policy.installRoots, filePath)) {
+        return 'binary-remove path is outside the allowed install directories'
       }
       return null
     }

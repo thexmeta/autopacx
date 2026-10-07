@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TrackedApp } from '@core/models/tracked-app'
 import { TrackedDebPackage } from '@core/models/tracked-deb-package'
+import { TrackedPacstallPackage } from '@core/models/tracked-pacstall-package'
 
 // Intercept `rename` so the atomic-write failure path can be exercised, and
 // `writeFile` so the concurrency test can observe whether writes overlap. Every
@@ -220,6 +221,26 @@ describe('JsonStore', () => {
     expect(apps.map((app) => app.displayName)).toEqual(['Alpha', 'Zeta'])
   })
 
+  it('sorts apps case-insensitively so beekeeper-studio lands between AyuGram Desktop and Zettlr', async () => {
+    const store = new JsonStore(dir)
+    // Deliberately written out of order; the read must interleave cases instead
+    // of grouping every capitalised name before the lower-case ones.
+    await store.writeApps([
+      sampleApp({ displayName: 'Zettlr' }),
+      sampleApp({ displayName: 'beekeeper-studio' }),
+      sampleApp({ displayName: 'AyuGram Desktop' })
+    ])
+
+    const names = (await store.readApps()).map((app) => app.displayName)
+    const ayu = names.indexOf('AyuGram Desktop')
+    const bee = names.indexOf('beekeeper-studio')
+    const zettlr = names.indexOf('Zettlr')
+
+    expect(ayu).toBeGreaterThanOrEqual(0)
+    expect(bee).toBeGreaterThan(ayu)
+    expect(zettlr).toBeGreaterThan(bee)
+  })
+
   it('round-trips deb packages', async () => {
     const store = new JsonStore(dir)
     const pkg = new TrackedDebPackage({
@@ -234,6 +255,36 @@ describe('JsonStore', () => {
 
     expect(reloaded.name).toBe('thing')
     expect(reloaded.createdAt.getTime()).toBe(pkg.createdAt.getTime())
+  })
+
+  it('round-trips pacstall packages through pacstall_packages.json', async () => {
+    const store = new JsonStore(dir)
+    const pkg = new TrackedPacstallPackage({
+      id: 1,
+      name: 'neovim',
+      displayName: 'Neovim',
+      installedVersion: '0.9.5',
+      latestVersion: '0.10.0',
+      autoUpdate: true,
+      lastChecked: new Date(2026, 9, 4, 0, 17, 23, 456),
+      createdAt: new Date(2026, 9, 4, 0, 17, 23, 456),
+      registryRepo: 'pacstall/pacstall-programs'
+    })
+
+    await store.writePacstallPackages([pkg])
+
+    const raw = JSON.parse(readFileSync(join(dir, 'pacstall_packages.json'), 'utf8')) as Array<
+      Record<string, unknown>
+    >
+    expect(raw[0]['created_at']).toBe('2026-10-04T00:17:23.456')
+    expect(String(raw[0]['created_at'])).not.toMatch(/Z$/)
+
+    const [reloaded] = await store.readPacstallPackages()
+    expect(reloaded.name).toBe('neovim')
+    expect(reloaded.installedVersion).toBe('0.9.5')
+    expect(reloaded.registryRepo).toBe('pacstall/pacstall-programs')
+    expect(reloaded.createdAt.getTime()).toBe(pkg.createdAt.getTime())
+    expect(reloaded.lastChecked?.getTime()).toBe(pkg.lastChecked?.getTime())
   })
 
   it('round-trips settings', async () => {

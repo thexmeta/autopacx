@@ -15,8 +15,16 @@ import { configureDebugLogger, type DebugLogSink } from './services/debug-logger
 import { ExternalAppChecker } from './services/external-app-checker'
 import { ExternalLinkService } from './services/external-link'
 import { GitHubService } from './services/github-service'
+import { suggestInstallTargets } from './services/install-location'
 import { InstallerService } from './services/installer-service'
+import { PacstallRegistry } from './services/pacstall-registry'
+import { PacstallService } from './services/pacstall-service'
 import { createWebPreferences } from './window-config'
+
+/** Returns a non-empty string setting, or `undefined` for anything else. */
+function optionalStringSetting(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined
+}
 
 function createWindow(deps: IpcRegistrationDeps): void {
   const mainWindow = new BrowserWindow({
@@ -86,10 +94,16 @@ void app.whenReady().then(async () => {
     console.error('Failed to apply the debug logging preference:', error)
   }
 
+  // The installer is built first so its asset classifier can be shared with the
+  // GitHub service, which tags each release asset with an install type for the
+  // renderer's package picker.
+  const installer = new InstallerService({ debugLog })
+
   // The GitHub service reads its token from settings; inject the decrypted
   // token so the plaintext is never persisted.
   const github = new GitHubService({
     debugLog,
+    identifyAssetType: (name) => installer.identifyAssetType(name),
     getSettings: async () => {
       const settings: Record<string, unknown> = { ...(await store.readSettings()) }
       const token = await tokenStore.getToken()
@@ -98,16 +112,41 @@ void app.whenReady().then(async () => {
     }
   })
 
+  // The pacstall registry caches its index/srclist under the app-data dir and
+  // reads the TTL setting; the service runs every privileged lifecycle verb
+  // through the same root-owned helper as the deb/binary paths.
+  //
+  // The registry repo/branch are seeded from the persisted settings at startup
+  // and resolved live from the same `getSettings` source on every request, so a
+  // mirror change made through `setSettings` takes effect without a restart.
+  const appSupportDirectory = async (): Promise<string> => store.directory
+  const startupSettings = await store.readSettings()
+  const pacstallRegistry = new PacstallRegistry({
+    appSupportDirectory,
+    getSettings: async () => ({ ...(await store.readSettings()) }),
+    registryRepo: optionalStringSetting(startupSettings['pacstall_registry_repo']),
+    registryBranch: optionalStringSetting(startupSettings['pacstall_registry_branch']),
+    debugLog
+  })
+  const pacstall = new PacstallService({
+    registry: pacstallRegistry,
+    appSupportDirectory,
+    debugLog
+  })
+
   const deps: IpcRegistrationDeps = {
     store,
     github,
-    installer: new InstallerService({ debugLog }),
+    installer,
     database: new DatabaseService({ debugLog }),
     external: new ExternalAppChecker({ debugLog }),
     externalLink: new ExternalLinkService(),
     token: tokenStore,
     config: new ConfigService(store, app.getVersion()),
     debugLog: debugLogger,
+    pacstall,
+    pacstallRegistry,
+    installLocation: { suggestTargets: (app) => suggestInstallTargets(app) },
     appVersion: app.getVersion()
   }
 

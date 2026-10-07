@@ -40,6 +40,26 @@ export interface ResolveOptions {
   readonly home?: string
 }
 
+/** A candidate directory a raw-binary install could target. */
+export interface InstallTargetSuggestion {
+  readonly path: string
+  /** Whether the current user can write into the directory. */
+  readonly writable: boolean
+  /** Whether the directory is already on the process `PATH`. */
+  readonly onPath: boolean
+  /** Whether the directory belongs to an installed system package. */
+  readonly ownedByPackage: boolean
+  /** Whether this is the top-ranked candidate the UI should pre-select. */
+  readonly recommended: boolean
+}
+
+export interface SuggestInstallTargetsOptions {
+  /** Overrides the real `PATH`; defaults to `process.env.PATH`. */
+  readonly pathDirs?: readonly string[]
+  /** Overrides the real `HOME`; defaults to `process.env.HOME`. */
+  readonly home?: string
+}
+
 /**
  * Discovers where an already-installed binary for a `TrackedApp` lives.
  *
@@ -120,7 +140,7 @@ export class InstallLocationResolver {
       path: key,
       source,
       writable: await InstallLocationResolver.isDirWritable(path.dirname(candidate)),
-      ownedByPackage: await this.ownedByPackage(candidate)
+      ownedByPackage: await InstallLocationResolver.isDirOwnedByPackage(candidate)
     })
   }
 
@@ -173,7 +193,7 @@ export class InstallLocationResolver {
    * A `dpkg -S` that ran and exited non-zero means "not owned", so it must not
    * fall through to rpm.
    */
-  private async ownedByPackage(candidate: string): Promise<boolean> {
+  static async isDirOwnedByPackage(candidate: string): Promise<boolean> {
     try {
       const res = await runProcess('dpkg', ['-S', candidate])
       return res.exitCode === 0
@@ -187,6 +207,98 @@ export class InstallLocationResolver {
       return false
     }
   }
+}
+
+/**
+ * Suggests directories a raw-binary install could target.
+ *
+ * Enumerates the process `PATH` followed by the well-known install directories
+ * (`~/.local/bin`, `/usr/local/bin`, `/usr/bin`, every `/opt/<name>/bin`) plus
+ * the app-specific `/opt/<app>/bin`, deduplicating on the resolved path. Each
+ * candidate is marked writable / on-PATH / package-owned, and the best
+ * user-writable candidate is flagged `recommended`: `~/.local/bin` wins, then
+ * `/usr/local/bin`, then the first remaining writable directory. Restores the
+ * Dart `chooseInstallTarget` behaviour.
+ *
+ * `pathDirs` and `home` are injectable for tests; they default to the real
+ * `PATH` and `HOME`.
+ */
+export async function suggestInstallTargets(
+  app: TrackedApp,
+  options: SuggestInstallTargetsOptions = {}
+): Promise<InstallTargetSuggestion[]> {
+  const pathDirs =
+    options.pathDirs ?? (process.env.PATH ?? '').split(':').filter((dir) => dir.length > 0)
+  const homeDir = options.home ?? process.env.HOME
+
+  const onPath = new Set(pathDirs.map((dir) => path.resolve(dir)))
+
+  const ordered: string[] = []
+  const seen = new Set<string>()
+  const add = (dir: string): void => {
+    const resolved = path.resolve(dir)
+    if (seen.has(resolved)) return
+    seen.add(resolved)
+    ordered.push(resolved)
+  }
+
+  for (const dir of pathDirs) add(dir)
+  for (const dir of await wellKnownDirs(homeDir)) add(dir)
+  for (const dir of appSpecificDirs(app)) add(dir)
+
+  const candidates: InstallTargetSuggestion[] = await Promise.all(
+    ordered.map(async (dir) => ({
+      path: dir,
+      writable: await InstallLocationResolver.isDirWritable(dir),
+      onPath: onPath.has(dir),
+      // Only probe the (slow) package-manager lookup for directories that
+      // actually exist; a missing directory cannot be package-owned.
+      ownedByPackage: (await isDirectory(dir))
+        ? await InstallLocationResolver.isDirOwnedByPackage(dir)
+        : false,
+      recommended: false
+    }))
+  )
+
+  const recommendedPath = chooseRecommendedPath(candidates, homeDir)
+  return candidates.map((candidate) =>
+    candidate.path === recommendedPath ? { ...candidate, recommended: true } : candidate
+  )
+}
+
+/** The app-specific `/opt/<name>/bin` directory, or none when the name is blank. */
+function appSpecificDirs(app: TrackedApp): string[] {
+  const name = [app.packageName, app.repoName, app.displayName]
+    .map((value) => value?.trim() ?? '')
+    .find((value) => value.length > 0)
+  if (name === undefined) return []
+  return [path.join('/opt', name, 'bin')]
+}
+
+/**
+ * Picks the path to mark `recommended`: a writable `~/.local/bin` first, then a
+ * writable `/usr/local/bin`, then the first remaining writable candidate.
+ * Returns `null` when no candidate is writable.
+ */
+function chooseRecommendedPath(
+  candidates: readonly InstallTargetSuggestion[],
+  home: string | undefined
+): string | null {
+  const writable = candidates.filter((candidate) => candidate.writable)
+  if (writable.length === 0) return null
+
+  if (home !== undefined && home.length > 0) {
+    const homeLocalBin = path.resolve(path.join(home, '.local', 'bin'))
+    const match = writable.find((candidate) => candidate.path === homeLocalBin)
+    if (match !== undefined) return match.path
+  }
+
+  const usrLocalBin = writable.find(
+    (candidate) => candidate.path === path.resolve('/usr/local/bin')
+  )
+  if (usrLocalBin !== undefined) return usrLocalBin.path
+
+  return writable[0].path
 }
 
 /** Returns the first whitespace-separated token of `command`, or null. */
@@ -240,6 +352,15 @@ async function isRegularFile(candidate: string): Promise<boolean> {
   try {
     const stat = await fs.stat(candidate)
     return stat.isFile()
+  } catch {
+    return false
+  }
+}
+
+async function isDirectory(candidate: string): Promise<boolean> {
+  try {
+    const stat = await fs.stat(candidate)
+    return stat.isDirectory()
   } catch {
     return false
   }

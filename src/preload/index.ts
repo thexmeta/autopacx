@@ -13,17 +13,29 @@ import {
 import type {
   AddAppInput,
   AddDebPackageInput,
+  AddPacstallPackageInput,
   BatchDeleteSummary,
   BatchOperationResultWire,
   BatchUpdateResult,
   DebugLogResult,
   ExportResult,
+  GetGithubReleaseAssetsInput,
+  GetInstallTargetsInput,
+  GitHubRepoSearchResultWire,
+  GithubReleaseAssetsWire,
   ImportResult,
   InstallOptions,
+  InstallTargetsResultWire,
   MaskedSettings,
+  PacstallBatchUpdateResult,
+  PacstallIndexWire,
+  PacstallPackageInfoWire,
+  PacstallStatusWire,
+  SearchGithubRepositoriesInput,
   Settings,
   TrackedAppWire,
-  TrackedDebPackageWire
+  TrackedDebPackageWire,
+  TrackedPacstallPackageWire
 } from '@core/index'
 
 /**
@@ -43,6 +55,7 @@ const api: AutonexApi = {
   getDebPackages: () => invoke<TrackedDebPackageWire[]>('getDebPackages'),
   getSettings: () => invoke<MaskedSettings>('getSettings'),
   getVersion: () => invoke<string>('getVersion'),
+  readClipboardText: () => invoke<string>('readClipboardText'),
 
   // --- GitHub token ----------------------------------------------------------
   hasGithubToken: () => invoke<boolean>('hasGithubToken'),
@@ -57,6 +70,8 @@ const api: AutonexApi = {
   installDeb: (pkg: TrackedDebPackageWire) => invoke<TrackedDebPackageWire>('installDeb', pkg),
   uninstallApp: (app: TrackedAppWire) => invoke<void>('uninstallApp', app),
   uninstallDebPackage: (pkg: TrackedDebPackageWire) => invoke<void>('uninstallDebPackage', pkg),
+  getInstallTargets: (input: GetInstallTargetsInput) =>
+    invoke<InstallTargetsResultWire>('getInstallTargets', input),
 
   // --- Updates ---------------------------------------------------------------
   checkAppUpdate: (app: TrackedAppWire) => invoke<TrackedAppWire>('checkAppUpdate', app),
@@ -77,6 +92,33 @@ const api: AutonexApi = {
   updateDebPackage: (pkg: TrackedDebPackageWire) => invoke<void>('updateDebPackage', pkg),
   deleteDebPackage: (id: number) => invoke<void>('deleteDebPackage', id),
 
+  // --- GitHub repository search ---------------------------------------------
+  searchGithubRepositories: (input: SearchGithubRepositoriesInput) =>
+    invoke<GitHubRepoSearchResultWire>('searchGithubRepositories', input),
+  getGithubReleaseAssets: (input: GetGithubReleaseAssetsInput) =>
+    invoke<GithubReleaseAssetsWire>('getGithubReleaseAssets', input),
+
+  // --- Pacstall -------------------------------------------------------------
+  getPacstallStatus: () => invoke<PacstallStatusWire>('getPacstallStatus'),
+  getPacstallIndex: (options?: { force?: boolean }) =>
+    invoke<PacstallIndexWire>('getPacstallIndex', options),
+  getPacstallPackageInfo: (input: { name: string }) =>
+    invoke<PacstallPackageInfoWire>('getPacstallPackageInfo', input),
+  getPacstallPackages: () => invoke<TrackedPacstallPackageWire[]>('getPacstallPackages'),
+  addPacstallPackage: (input: AddPacstallPackageInput) =>
+    invoke<number>('addPacstallPackage', input),
+  installPacstallPackage: (pkg: TrackedPacstallPackageWire) =>
+    invoke<TrackedPacstallPackageWire>('installPacstallPackage', pkg),
+  uninstallPacstallPackage: (pkg: TrackedPacstallPackageWire) =>
+    invoke<void>('uninstallPacstallPackage', pkg),
+  checkPacstallUpdate: (pkg: TrackedPacstallPackageWire) =>
+    invoke<string | null>('checkPacstallUpdate', pkg),
+  updatePacstallPackage: (pkg: TrackedPacstallPackageWire) =>
+    invoke<void>('updatePacstallPackage', pkg),
+  deletePacstallPackage: (id: number) => invoke<void>('deletePacstallPackage', id),
+  launchPacstall: (pkg: TrackedPacstallPackageWire) => invoke<void>('launchPacstall', pkg),
+  checkPacstallAllUpdates: () => invoke<PacstallBatchUpdateResult>('checkPacstallAllUpdates'),
+
   // --- Data ------------------------------------------------------------------
   exportData: () => invoke<ExportResult>('exportData'),
   importData: () => invoke<ImportResult>('importData'),
@@ -89,12 +131,18 @@ const api: AutonexApi = {
   setSettings: (settings: Settings) => invoke<void>('setSettings', settings),
 
   // --- Batch -----------------------------------------------------------------
-  batchInstall: (apps: TrackedAppWire[], debPackages: TrackedDebPackageWire[]) =>
-    invoke<BatchOperationResultWire[]>('batchInstall', apps, debPackages),
-  batchDelete: (appIds: number[], debPackageIds: number[]) =>
-    invoke<BatchDeleteSummary>('batchDelete', appIds, debPackageIds),
-  batchUpdate: (apps: TrackedAppWire[], debPackages: TrackedDebPackageWire[]) =>
-    invoke<BatchOperationResultWire[]>('batchUpdate', apps, debPackages),
+  batchInstall: (
+    apps: TrackedAppWire[],
+    debPackages: TrackedDebPackageWire[],
+    pacstallPackages: TrackedPacstallPackageWire[]
+  ) => invoke<BatchOperationResultWire[]>('batchInstall', apps, debPackages, pacstallPackages),
+  batchDelete: (appIds: number[], debPackageIds: number[], pacstallPackageIds: number[]) =>
+    invoke<BatchDeleteSummary>('batchDelete', appIds, debPackageIds, pacstallPackageIds),
+  batchUpdate: (
+    apps: TrackedAppWire[],
+    debPackages: TrackedDebPackageWire[],
+    pacstallPackages: TrackedPacstallPackageWire[]
+  ) => invoke<BatchOperationResultWire[]>('batchUpdate', apps, debPackages, pacstallPackages),
 
   // --- Events ----------------------------------------------------------------
   onEvent: (listener: (event: IpcEvent) => void) => {

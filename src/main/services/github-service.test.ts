@@ -2,8 +2,9 @@
 // Copyright (c) 2024 PlebOne
 
 import { describe, expect, it, vi } from 'vitest'
+import { InstallType } from '@core/models/install-type'
 import { Release, ReleaseAsset, parseReleases } from '@core/models/release'
-import { GitHubService } from './github-service'
+import { GitHubRateLimitError, GitHubService } from './github-service'
 import type { HttpClient, HttpRequestInit, HttpResponse } from './http'
 
 /**
@@ -424,5 +425,294 @@ describe('GitHubService getLatestReleaseWithPackageInfo', () => {
     // getLatestRelease already narrows assets by architecture, so a release with
     // no matching asset yields no result rather than a fallback.
     expect(info).toBeNull()
+  })
+})
+
+describe('GitHubService.searchRepositories', () => {
+  function searchResponse(payload: unknown, headers: Record<string, string> = {}): HttpResponse {
+    return {
+      status: 200,
+      headers,
+      body: JSON.stringify(payload),
+      url: 'https://api.github.com/search/repositories'
+    }
+  }
+
+  it('sends the Authorization Bearer token from settings when configured', async () => {
+    const { request, client } = stubHttp(async () => searchResponse({ total_count: 0, items: [] }))
+    const service = new GitHubService({
+      httpClient: client,
+      getSettings: async () => ({ github_token: 'secret-token' })
+    })
+
+    await service.searchRepositories('pacstall')
+
+    const [url, init] = request.mock.calls[0]
+    expect(url).toContain('https://api.github.com/search/repositories?q=pacstall')
+    expect(init?.headers?.['Authorization']).toBe('Bearer secret-token')
+    expect(init?.headers?.['Accept']).toBe('application/vnd.github+json')
+    expect(init?.headers?.['X-GitHub-Api-Version']).toBe('2022-11-28')
+    expect(init?.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('omits the Authorization header when no token is configured', async () => {
+    const { request, client } = stubHttp(async () => searchResponse({ total_count: 0, items: [] }))
+    const service = new GitHubService({ httpClient: client, getSettings: async () => ({}) })
+
+    await service.searchRepositories('pacstall')
+
+    const [, init] = request.mock.calls[0]
+    expect(init?.headers?.['Authorization']).toBeUndefined()
+  })
+
+  it('encodes the query and appends sort/order/per_page/page parameters', async () => {
+    const { request, client } = stubHttp(async () => searchResponse({ total_count: 0, items: [] }))
+    const service = new GitHubService({ httpClient: client })
+
+    await service.searchRepositories('hello world', {
+      sort: 'stars',
+      order: 'desc',
+      perPage: 25,
+      page: 3
+    })
+
+    const [url] = request.mock.calls[0]
+    expect(url).toBe(
+      'https://api.github.com/search/repositories?q=hello%20world' +
+        '&sort=stars&order=desc&per_page=25&page=3'
+    )
+  })
+
+  it('parses the search result through parseRepoSearch', async () => {
+    const { client } = stubHttp(async () =>
+      searchResponse({
+        total_count: 1,
+        incomplete_results: false,
+        items: [
+          {
+            full_name: 'pacstall/pacstall',
+            description: 'An AUR-inspired package manager',
+            stargazers_count: 1200,
+            language: 'Shell',
+            license: { spdx_id: 'GPL-3.0', name: 'GNU General Public License v3.0' },
+            default_branch: 'develop',
+            html_url: 'https://github.com/pacstall/pacstall',
+            updated_at: '2026-01-01T00:00:00Z'
+          }
+        ]
+      })
+    )
+    const service = new GitHubService({ httpClient: client })
+
+    const result = await service.searchRepositories('pacstall')
+
+    expect(result.total_count).toBe(1)
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0].full_name).toBe('pacstall/pacstall')
+    expect(result.items[0].license?.spdx_id).toBe('GPL-3.0')
+  })
+
+  it('maps a 403 to a GitHubRateLimitError carrying the rate-limit headers', async () => {
+    const { client } = stubHttp(async () => ({
+      status: 403,
+      headers: {
+        'retry-after': '60',
+        'x-ratelimit-reset': '1767225600',
+        'x-ratelimit-remaining': '0'
+      },
+      body: JSON.stringify({ message: 'API rate limit exceeded' }),
+      url: 'https://api.github.com/search/repositories'
+    }))
+    const service = new GitHubService({ httpClient: client })
+
+    const error = await service.searchRepositories('pacstall').catch((err: unknown) => err)
+
+    expect(error).toBeInstanceOf(GitHubRateLimitError)
+    const rateLimit = error as GitHubRateLimitError
+    expect(rateLimit.status).toBe(403)
+    expect(rateLimit.retryAfter).toBe(60)
+    expect(rateLimit.reset).toBe(1767225600)
+    expect(rateLimit.remaining).toBe(0)
+  })
+
+  it('maps a 429 to a GitHubRateLimitError with absent headers as null', async () => {
+    const { client } = stubHttp(async () => ({
+      status: 429,
+      headers: {},
+      body: '',
+      url: 'https://api.github.com/search/repositories'
+    }))
+    const service = new GitHubService({ httpClient: client })
+
+    const error = await service.searchRepositories('pacstall').catch((err: unknown) => err)
+
+    expect(error).toBeInstanceOf(GitHubRateLimitError)
+    const rateLimit = error as GitHubRateLimitError
+    expect(rateLimit.status).toBe(429)
+    expect(rateLimit.retryAfter).toBeNull()
+    expect(rateLimit.reset).toBeNull()
+    expect(rateLimit.remaining).toBeNull()
+  })
+
+  it('throws a plain load failure for other non-200 statuses', async () => {
+    const { client } = stubHttp(async () => ({
+      status: 500,
+      headers: {},
+      body: 'boom',
+      url: 'https://api.github.com/search/repositories'
+    }))
+    const service = new GitHubService({ httpClient: client })
+
+    await expect(service.searchRepositories('pacstall')).rejects.toThrow(
+      'Failed to search repositories: 500'
+    )
+  })
+})
+
+describe('GitHubService getGithubReleaseAssets', () => {
+  /** A minimal classifier standing in for the installer's identifyAssetType. */
+  function classify(name: string): InstallType | null {
+    if (name.endsWith('.deb')) return InstallType.deb
+    if (name.endsWith('.tar.gz')) return InstallType.binary
+    return null
+  }
+
+  it('lists only installable assets, tagging each with its install type', async () => {
+    const { client } = stubHttp(async () =>
+      jsonResponse([
+        releaseJson({
+          tag_name: 'v1.2.0',
+          published_at: '2026-03-04T05:06:07Z',
+          assets: [
+            assetJson('app-amd64.deb'),
+            assetJson('app-linux.tar.gz'),
+            assetJson('checksums.txt')
+          ]
+        })
+      ])
+    )
+    const service = new GitHubService({ httpClient: client, identifyAssetType: classify })
+
+    const result = await service.getGithubReleaseAssets('o', 'r')
+
+    expect(result.tagName).toBe('v1.2.0')
+    expect(result.publishedAt).toBe('2026-03-04T05:06:07.000Z')
+    expect(result.assets).toEqual([
+      {
+        name: 'app-amd64.deb',
+        size: 0,
+        downloadUrl: 'https://example.com/app-amd64.deb',
+        installType: InstallType.deb
+      },
+      {
+        name: 'app-linux.tar.gz',
+        size: 0,
+        downloadUrl: 'https://example.com/app-linux.tar.gz',
+        installType: InstallType.binary
+      }
+    ])
+  })
+
+  it('excludes prereleases unless requested', async () => {
+    const { client } = stubHttp(async () =>
+      jsonResponse([
+        releaseJson({
+          tag_name: 'v2.0.0-beta',
+          prerelease: true,
+          assets: [assetJson('app.deb')]
+        }),
+        releaseJson({ tag_name: 'v1.0.0', prerelease: false, assets: [assetJson('app.deb')] })
+      ])
+    )
+    const service = new GitHubService({ httpClient: client, identifyAssetType: classify })
+
+    expect((await service.getGithubReleaseAssets('o', 'r')).tagName).toBe('v1.0.0')
+    expect(
+      (await service.getGithubReleaseAssets('o', 'r', { includePrerelease: true })).tagName
+    ).toBe('v2.0.0-beta')
+  })
+
+  it('returns a null tag and no assets when there is no usable release', async () => {
+    const { client } = stubHttp(async () => jsonResponse([]))
+    const service = new GitHubService({ httpClient: client, identifyAssetType: classify })
+
+    expect(await service.getGithubReleaseAssets('o', 'r')).toEqual({
+      tagName: null,
+      assets: [],
+      publishedAt: null
+    })
+  })
+
+  it('reports matchedNames (incl. non-installable) and totalAssets for a filtered lookup', async () => {
+    const { client } = stubHttp(async () =>
+      jsonResponse([
+        releaseJson({
+          tag_name: 'v2.0.0',
+          published_at: '2026-05-06T07:08:09Z',
+          assets: [
+            assetJson('app-amd64.deb'),
+            assetJson('app.sha256'),
+            assetJson('notes.txt')
+          ]
+        })
+      ])
+    )
+    const service = new GitHubService({ httpClient: client, identifyAssetType: classify })
+
+    const result = await service.getGithubReleaseAssets('o', 'r', { assetFilterPattern: '*' })
+
+    expect(result.tagName).toBe('v2.0.0')
+    expect(result.publishedAt).toBe('2026-05-06T07:08:09.000Z')
+    // Every glob-matched name is reported, installable or not.
+    expect(result.matchedNames).toEqual(['app-amd64.deb', 'app.sha256', 'notes.txt'])
+    expect(result.totalAssets).toBe(3)
+    // Only the `.deb` is installable, so it is the sole asset option.
+    expect(result.assets).toEqual([
+      {
+        name: 'app-amd64.deb',
+        size: 0,
+        downloadUrl: 'https://example.com/app-amd64.deb',
+        installType: InstallType.deb
+      }
+    ])
+  })
+
+  it('narrows matchedNames to the glob matches while totalAssets stays the pre-filter count', async () => {
+    const { client } = stubHttp(async () =>
+      jsonResponse([
+        releaseJson({
+          tag_name: 'v2.0.0',
+          assets: [assetJson('app-amd64.deb'), assetJson('app.sha256'), assetJson('notes.txt')]
+        })
+      ])
+    )
+    const service = new GitHubService({ httpClient: client, identifyAssetType: classify })
+
+    const result = await service.getGithubReleaseAssets('o', 'r', { assetFilterPattern: '*.deb' })
+
+    expect(result.matchedNames).toEqual(['app-amd64.deb'])
+    expect(result.totalAssets).toBe(3)
+  })
+
+  it('returns no match for a filtered lookup that matches nothing', async () => {
+    const { client } = stubHttp(async () =>
+      jsonResponse([releaseJson({ tag_name: 'v1.0.0', assets: [assetJson('app-amd64.deb')] })])
+    )
+    const service = new GitHubService({ httpClient: client, identifyAssetType: classify })
+
+    expect(await service.getGithubReleaseAssets('o', 'r', { assetFilterPattern: '*.rpm' })).toEqual({
+      tagName: null,
+      assets: [],
+      publishedAt: null
+    })
+  })
+
+  it('rejects an invalid owner or repo before issuing a request', async () => {
+    const { request, client } = stubHttp(async () => jsonResponse([]))
+    const service = new GitHubService({ httpClient: client, identifyAssetType: classify })
+
+    await expect(service.getGithubReleaseAssets('', 'r')).rejects.toThrow(/owner/)
+    await expect(service.getGithubReleaseAssets('o', 'a/b')).rejects.toThrow(/name/)
+    expect(request).not.toHaveBeenCalled()
   })
 })

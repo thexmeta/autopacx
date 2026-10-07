@@ -846,6 +846,118 @@ describe('InstallerService privileged install path', () => {
     expect(recorded).toEqual([])
   })
 
+  it('uninstalls a binary by removing its stored launch command (writable target)', async () => {
+    const dir = join(tmp, 'bin')
+    await mkdir(dir, { recursive: true })
+    const target = join(dir, 'tool')
+    await writeFile(target, 'INSTALLED')
+    const app = new TrackedApp({
+      repoOwner: 'owner',
+      repoName: 'repo',
+      displayName: 'Repo',
+      installType: InstallType.binary,
+      launchCommand: target,
+      createdAt: new Date('2026-01-01T00:00:00Z')
+    })
+
+    await service.uninstallPackage(app)
+
+    expect(await exists(target)).toBe(false)
+    // A writable target needs no privileged helper call at all.
+    expect(recorded).toEqual([])
+  })
+
+  it('restores the replaced binary from the <target>.bak sibling instead of deleting it', async () => {
+    const dir = join(tmp, 'bin')
+    await mkdir(dir, { recursive: true })
+    const target = join(dir, 'tool')
+    await writeFile(target, 'NEW-BINARY')
+    await writeFile(`${target}.bak`, 'OLD-BINARY')
+    const app = new TrackedApp({
+      repoOwner: 'owner',
+      repoName: 'repo',
+      displayName: 'Repo',
+      installType: InstallType.binary,
+      launchCommand: target,
+      createdAt: new Date('2026-01-01T00:00:00Z')
+    })
+
+    await service.uninstallPackage(app)
+
+    expect(await readFile(target, 'utf8')).toBe('OLD-BINARY')
+    expect(await exists(`${target}.bak`)).toBe(false)
+    expect(recorded).toEqual([])
+  })
+
+  it('restores the replaced binary from the app-data backup when no sibling exists', async () => {
+    const dir = join(tmp, 'bin')
+    await mkdir(dir, { recursive: true })
+    const target = join(dir, 'tool')
+    await writeFile(target, 'NEW-BINARY')
+    const backupDir = join(appData, 'binary_backups')
+    await mkdir(backupDir, { recursive: true })
+    const backup = join(backupDir, InstallerService.appDataBackupName(target))
+    await writeFile(backup, 'OLD-BINARY')
+    const app = new TrackedApp({
+      repoOwner: 'owner',
+      repoName: 'repo',
+      displayName: 'Repo',
+      installType: InstallType.binary,
+      launchCommand: target,
+      createdAt: new Date('2026-01-01T00:00:00Z')
+    })
+
+    await service.uninstallPackage(app)
+
+    expect(await readFile(target, 'utf8')).toBe('OLD-BINARY')
+    expect(await exists(backup)).toBe(false)
+    expect(recorded).toEqual([])
+  })
+
+  it('removes an unwritable binary through the helper binary-remove verb', async () => {
+    const target = await readOnlyTargetWith('tool', 'INSTALLED')
+    const app = new TrackedApp({
+      repoOwner: 'owner',
+      repoName: 'repo',
+      displayName: 'Repo',
+      installType: InstallType.binary,
+      launchCommand: target,
+      createdAt: new Date('2026-01-01T00:00:00Z')
+    })
+
+    await service.uninstallPackage(app)
+
+    expect(recorded).toEqual([['pkexec', HELPER, 'binary-remove', target]])
+  }, 20_000)
+
+  it('refuses a binary uninstall with no stored installed path', async () => {
+    const app = new TrackedApp({
+      repoOwner: 'owner',
+      repoName: 'repo',
+      displayName: 'Repo',
+      installType: InstallType.binary,
+      createdAt: new Date('2026-01-01T00:00:00Z')
+    })
+
+    await expect(service.uninstallPackage(app)).rejects.toThrow('no installed path is stored')
+    expect(recorded).toEqual([])
+  })
+
+  it('treats a missing binary as an already-completed uninstall', async () => {
+    const target = join(tmp, 'bin', 'gone')
+    const app = new TrackedApp({
+      repoOwner: 'owner',
+      repoName: 'repo',
+      displayName: 'Repo',
+      installType: InstallType.binary,
+      launchCommand: target,
+      createdAt: new Date('2026-01-01T00:00:00Z')
+    })
+
+    await expect(service.uninstallPackage(app)).resolves.toBeUndefined()
+    expect(recorded).toEqual([])
+  })
+
   it('fails with a clear error and runs nothing when the privileged helper is absent', async () => {
     const bare = new InstallerService({
       appSupportDirectory: async () => appData,

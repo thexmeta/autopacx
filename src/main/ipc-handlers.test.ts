@@ -7,20 +7,32 @@ import { InstallType } from '@core/models/install-type'
 import { Release } from '@core/models/release'
 import { TrackedApp } from '@core/models/tracked-app'
 import { TrackedDebPackage } from '@core/models/tracked-deb-package'
+import { TrackedPacstallPackage } from '@core/models/tracked-pacstall-package'
 import {
   createHandlers,
   maskSettings,
+  SETTINGS_DEFAULTS,
   type ConfigLike,
   type DatabaseLike,
   type DebugLogLike,
   type ExternalCheckerLike,
   type ExternalLinkLike,
   type GitHubLike,
+  type InstallLocationLike,
   type InstallerLike,
   type IpcDependencies,
+  type PacstallLike,
+  type PacstallRegistryPort,
   type StoreLike,
   type TokenLike
 } from './ipc-handlers'
+
+// The main-process clipboard is the only Electron surface `createHandlers`
+// touches. Stub it so this suite stays Node-only and can drive the value.
+const { clipboardReadText } = vi.hoisted(() => ({
+  clipboardReadText: vi.fn<() => string>(() => 'clipboard text')
+}))
+vi.mock('electron', () => ({ clipboard: { readText: clipboardReadText } }))
 
 // --- Fixtures ---------------------------------------------------------------
 
@@ -49,6 +61,18 @@ function trackedDeb(
   })
 }
 
+function trackedPacstall(
+  overrides: Partial<ConstructorParameters<typeof TrackedPacstallPackage>[0]> = {}
+): TrackedPacstallPackage {
+  return new TrackedPacstallPackage({
+    id: 1,
+    name: 'neovim',
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    registryRepo: 'pacstall/pacstall-programs',
+    ...overrides
+  })
+}
+
 function release(tagName = 'v2.0.0'): Release {
   return new Release({
     tagName,
@@ -62,12 +86,14 @@ function release(tagName = 'v2.0.0'): Release {
 interface HarnessInit {
   apps?: TrackedApp[]
   debPackages?: TrackedDebPackage[]
+  pacstallPackages?: TrackedPacstallPackage[]
   settings?: Settings
 }
 
 function makeHarness(init: HarnessInit = {}) {
   let apps = [...(init.apps ?? [])]
   let debPackages = [...(init.debPackages ?? [])]
+  let pacstallPackages = [...(init.pacstallPackages ?? [])]
   let settings: Record<string, unknown> = { ...(init.settings ?? {}) }
 
   const store: StoreLike = {
@@ -79,13 +105,22 @@ function makeHarness(init: HarnessInit = {}) {
     writeDebPackages: vi.fn(async (next: readonly TrackedDebPackage[]) => {
       debPackages = [...next]
     }),
+    readPacstallPackages: vi.fn(async () => [...pacstallPackages]),
+    writePacstallPackages: vi.fn(async (next: readonly TrackedPacstallPackage[]) => {
+      pacstallPackages = [...next]
+    }),
     readSettings: vi.fn(async () => ({ ...settings })),
     writeSettings: vi.fn(async (next: Settings) => {
       settings = { ...next }
     })
   }
 
-  const github: GitHubLike = { getLatestReleaseWithPackageInfo: vi.fn() }
+  const github: GitHubLike = {
+    getLatestRelease: vi.fn(),
+    getLatestReleaseWithPackageInfo: vi.fn(),
+    getGithubReleaseAssets: vi.fn(),
+    searchRepositories: vi.fn()
+  }
   const installer: InstallerLike = {
     identifyAssetType: vi.fn(),
     downloadFile: vi.fn(),
@@ -108,7 +143,44 @@ function makeHarness(init: HarnessInit = {}) {
     setEnabled: vi.fn()
   }
   const externalLink: ExternalLinkLike = { open: vi.fn(async () => undefined) }
+  const pacstall: PacstallLike = {
+    status: vi.fn(async () => ({
+      installed: false,
+      version: null,
+      path: null,
+      pathUnexpected: false
+    })),
+    install: vi.fn(async () => undefined),
+    remove: vi.fn(async () => undefined),
+    upgrade: vi.fn(async () => undefined),
+    upgradeAll: vi.fn(async () => undefined),
+    checkUpdate: vi.fn(async () => null),
+    readInstalledVersion: vi.fn(async () => 'unknown'),
+    launch: vi.fn(async () => undefined)
+  }
+  const pacstallRegistry: PacstallRegistryPort = {
+    fetchIndex: vi.fn(async () => ({
+      names: [],
+      fetchedAt: new Date().toISOString(),
+      fromCache: false
+    })),
+    fetchPackageInfo: vi.fn(async () => ({
+      pkgname: '',
+      pkgver: '',
+      pkgdesc: '',
+      arch: [],
+      depends: [],
+      optdepends: [],
+      makedepends: [],
+      maintainer: '',
+      url: '',
+      license: [],
+      source: [],
+      sha256sums: []
+    }))
+  }
   const emit = vi.fn()
+  const installLocation: InstallLocationLike = { suggestTargets: vi.fn(async () => []) }
 
   const deps: IpcDependencies = {
     store,
@@ -120,12 +192,16 @@ function makeHarness(init: HarnessInit = {}) {
     config,
     debugLog,
     externalLink,
+    pacstall,
+    pacstallRegistry,
+    installLocation,
     appVersion: '1.2.3',
     emit
   }
 
   return {
     handlers: createHandlers(deps),
+    store,
     github,
     installer,
     database,
@@ -134,9 +210,13 @@ function makeHarness(init: HarnessInit = {}) {
     config,
     debugLog,
     externalLink,
+    pacstall,
+    pacstallRegistry,
+    installLocation,
     emit,
     getApps: () => apps,
     getDebs: () => debPackages,
+    getPacstall: () => pacstallPackages,
     getSettings: () => settings
   }
 }
@@ -179,6 +259,19 @@ describe('read handlers', () => {
 
     expect(await h.handlers.getVersion([])).toBe('1.2.3')
     expect(await h.handlers.hasGithubToken([])).toBe(true)
+  })
+
+  it('reads the clipboard text via the main-process clipboard', async () => {
+    const h = makeHarness()
+    clipboardReadText.mockReturnValue('https://github.com/owner/repo')
+
+    expect(await h.handlers.readClipboardText([])).toBe('https://github.com/owner/repo')
+    expect(clipboardReadText).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects arguments on the no-argument clipboard read', async () => {
+    const h = makeHarness()
+    await expect(h.handlers.readClipboardText([{ unexpected: true }])).rejects.toThrow()
   })
 })
 
@@ -293,20 +386,183 @@ describe('installDeb', () => {
 })
 
 describe('uninstall handlers', () => {
-  it('uninstalls an app through the installer', async () => {
-    const h = makeHarness()
-    await h.handlers.uninstallApp([trackedApp().toMap()])
+  it('uninstalls an app through the installer and clears its persisted install state', async () => {
+    const app = trackedApp({
+      installedVersion: 'v1.0.0',
+      installType: InstallType.deb,
+      launchCommand: '/usr/bin/app',
+      packageName: 'app'
+    })
+    const h = makeHarness({ apps: [app] })
+
+    await h.handlers.uninstallApp([app.toMap()])
+
     expect(h.installer.uninstallPackage).toHaveBeenCalledTimes(1)
     const passed = vi.mocked(h.installer.uninstallPackage).mock.calls[0]?.[0]
     expect(passed).toBeInstanceOf(TrackedApp)
+
+    const stored = h.getApps()[0]
+    expect(stored?.installedVersion).toBeNull()
+    expect(stored?.installType).toBeNull()
+    expect(stored?.launchCommand).toBeNull()
+    expect(stored?.packageName).toBeNull()
+    expect(stored?.lastChecked).toBeInstanceOf(Date)
   })
 
-  it('uninstalls a deb package through the installer', async () => {
-    const h = makeHarness()
-    await h.handlers.uninstallDebPackage([trackedDeb().toMap()])
+  it('propagates a store-write failure from uninstallApp', async () => {
+    const h = makeHarness({ apps: [trackedApp({ installedVersion: 'v1.0.0' })] })
+    vi.mocked(h.store.writeApps).mockRejectedValueOnce(new Error('disk full'))
+
+    await expect(h.handlers.uninstallApp([trackedApp().toMap()])).rejects.toThrow(/disk full/)
+  })
+
+  it('uninstalls a deb package through the installer and clears its persisted state', async () => {
+    const pkg = trackedDeb({
+      installedVersion: '1.2.3',
+      launchCommand: '/usr/bin/thing',
+      packageName: 'thing'
+    })
+    const h = makeHarness({ debPackages: [pkg] })
+
+    await h.handlers.uninstallDebPackage([pkg.toMap()])
+
     expect(h.installer.uninstallDebPackage).toHaveBeenCalledTimes(1)
     const passed = vi.mocked(h.installer.uninstallDebPackage).mock.calls[0]?.[0]
     expect(passed).toBeInstanceOf(TrackedDebPackage)
+
+    const stored = h.getDebs()[0]
+    expect(stored?.installedVersion).toBeNull()
+    expect(stored?.launchCommand).toBeNull()
+    expect(stored?.packageName).toBeNull()
+    expect(stored?.lastChecked).toBeInstanceOf(Date)
+  })
+})
+
+describe('getInstallTargets', () => {
+  it('returns candidates and derives defaultPath from the recommended entry', async () => {
+    const h = makeHarness()
+    const candidates = [
+      {
+        path: '/usr/local/bin',
+        writable: true,
+        onPath: true,
+        ownedByPackage: false,
+        recommended: false
+      },
+      {
+        path: '/home/u/.local/bin',
+        writable: true,
+        onPath: true,
+        ownedByPackage: false,
+        recommended: true
+      }
+    ]
+    vi.mocked(h.installLocation.suggestTargets).mockResolvedValue(candidates)
+
+    const result = (await h.handlers.getInstallTargets([{ name: 'myapp' }])) as {
+      candidates: unknown[]
+      defaultPath: string | null
+    }
+
+    const passedApp = vi.mocked(h.installLocation.suggestTargets).mock.calls[0]?.[0]
+    expect(passedApp).toBeInstanceOf(TrackedApp)
+    expect(passedApp?.repoName).toBe('myapp')
+    expect(result.candidates).toEqual(candidates)
+    expect(result.defaultPath).toBe('/home/u/.local/bin')
+  })
+
+  it('returns a null defaultPath when no candidate is recommended', async () => {
+    const h = makeHarness()
+    vi.mocked(h.installLocation.suggestTargets).mockResolvedValue([
+      {
+        path: '/usr/local/bin',
+        writable: true,
+        onPath: true,
+        ownedByPackage: false,
+        recommended: false
+      }
+    ])
+
+    const result = (await h.handlers.getInstallTargets([{ name: 'myapp' }])) as {
+      defaultPath: string | null
+    }
+    expect(result.defaultPath).toBeNull()
+  })
+
+  it('rejects a blank name before reaching the location service', async () => {
+    const h = makeHarness()
+    await expect(h.handlers.getInstallTargets([{ name: '' }])).rejects.toThrow()
+    expect(h.installLocation.suggestTargets).not.toHaveBeenCalled()
+  })
+})
+
+describe('operation progress events', () => {
+  it('emits starting then done around a successful install', async () => {
+    const h = makeHarness({ apps: [trackedApp()] })
+    vi.mocked(h.github.getLatestReleaseWithPackageInfo).mockResolvedValue({
+      release: release('v2.0.0'),
+      packageName: 'app.deb',
+      downloadUrl: 'https://example.com/app.deb',
+      releaseDate: null
+    })
+    vi.mocked(h.installer.identifyAssetType).mockReturnValue(InstallType.deb)
+    vi.mocked(h.installer.downloadFile).mockResolvedValue('/tmp/app.deb')
+    vi.mocked(h.installer.installPackage).mockResolvedValue({
+      launchCommand: '/usr/bin/app',
+      packageName: 'app'
+    })
+
+    await h.handlers.installApp([trackedApp().toMap()])
+
+    const events = vi
+      .mocked(h.emit)
+      .mock.calls.map((call) => call[0] as Record<string, unknown>)
+      .filter((event) => event['kind'] === 'operation' && event['method'] === 'installApp')
+
+    expect(events.map((event) => event['phase'])).toEqual(['starting', 'done'])
+    expect(events[0]).toMatchObject({
+      kind: 'operation',
+      method: 'installApp',
+      name: 'App',
+      completed: 0,
+      total: 1
+    })
+    expect(events[1]).toMatchObject({ phase: 'done', completed: 1, total: 1 })
+  })
+
+  it('emits starting then failed (with detail) and rethrows on a failing install', async () => {
+    const h = makeHarness({ apps: [trackedApp()] })
+    vi.mocked(h.github.getLatestReleaseWithPackageInfo).mockRejectedValue(new Error('offline'))
+
+    await expect(h.handlers.installApp([trackedApp().toMap()])).rejects.toThrow('offline')
+
+    const events = vi
+      .mocked(h.emit)
+      .mock.calls.map((call) => call[0] as Record<string, unknown>)
+      .filter((event) => event['kind'] === 'operation' && event['method'] === 'installApp')
+
+    expect(events.map((event) => event['phase'])).toEqual(['starting', 'failed'])
+    expect(events[1]).toMatchObject({
+      phase: 'failed',
+      completed: 1,
+      total: 1,
+      detail: 'offline'
+    })
+  })
+
+  it('does not emit operation events for batch handlers', async () => {
+    const app = trackedApp()
+    const h = makeHarness({ apps: [app] })
+    vi.mocked(h.github.getLatestReleaseWithPackageInfo).mockResolvedValue(null)
+    vi.mocked(h.external.getExternalVersion).mockResolvedValue(null)
+
+    await h.handlers.batchUpdate([[app.toMap()], [], []])
+
+    const operationEvents = vi
+      .mocked(h.emit)
+      .mock.calls.map((call) => call[0] as Record<string, unknown>)
+      .filter((event) => event['kind'] === 'operation')
+    expect(operationEvents).toEqual([])
   })
 })
 
@@ -473,6 +729,33 @@ describe('checkAllUpdates', () => {
     const last = events.at(-1)
     expect(last?.['total']).toBe(2)
     expect(last?.['completed']).toBe(2)
+  })
+
+  it('sweeps pacstall packages too, returning the refreshed list', async () => {
+    const pkg = trackedPacstall()
+    const h = makeHarness({ pacstallPackages: [pkg] })
+    vi.mocked(h.pacstall.checkUpdate).mockResolvedValue('0.12.0')
+
+    const result = (await h.handlers.checkAllUpdates([])) as {
+      pacstallPackages: Array<Record<string, unknown>>
+      failures: Array<{ name: string; error: string }>
+    }
+
+    expect(h.pacstall.checkUpdate).toHaveBeenCalledTimes(1)
+    expect(result.pacstallPackages[0]?.['latest_version']).toBe('0.12.0')
+    expect(result.failures).toEqual([])
+  })
+
+  it('collects a pacstall failure without aborting the sweep', async () => {
+    const pkg = trackedPacstall({ displayName: 'Neovim' })
+    const h = makeHarness({ pacstallPackages: [pkg] })
+    vi.mocked(h.pacstall.checkUpdate).mockRejectedValue(new Error('registry offline'))
+
+    const result = (await h.handlers.checkAllUpdates([])) as {
+      failures: Array<{ name: string; error: string }>
+    }
+
+    expect(result.failures).toEqual([{ name: 'Neovim', error: 'registry offline' }])
   })
 })
 
@@ -674,7 +957,7 @@ describe('batchInstall', () => {
       packageName: 'app'
     })
 
-    const results = (await h.handlers.batchInstall([[app.toMap()], []])) as Array<
+    const results = (await h.handlers.batchInstall([[app.toMap()], [], []])) as Array<
       Record<string, unknown>
     >
 
@@ -693,11 +976,30 @@ describe('batchInstall', () => {
     const h = makeHarness({ apps: [app] })
     vi.mocked(h.github.getLatestReleaseWithPackageInfo).mockRejectedValue(new Error('offline'))
 
-    const results = (await h.handlers.batchInstall([[app.toMap()], []])) as Array<
+    const results = (await h.handlers.batchInstall([[app.toMap()], [], []])) as Array<
       Record<string, unknown>
     >
     expect(results[0]?.['success']).toBe(false)
     expect(results[0]?.['error']).toBe('offline')
+  })
+
+  it('installs a pacstall package from the third array', async () => {
+    const pkg = trackedPacstall()
+    const h = makeHarness({ pacstallPackages: [pkg] })
+    vi.mocked(h.pacstall.readInstalledVersion).mockResolvedValue('0.10.0')
+
+    const results = (await h.handlers.batchInstall([[], [], [pkg.toMap()]])) as Array<
+      Record<string, unknown>
+    >
+
+    expect(h.pacstall.install).toHaveBeenCalledWith('neovim')
+    expect(results).toHaveLength(1)
+    expect(results[0]?.['appName']).toBe('neovim')
+    expect(results[0]?.['newVersion']).toBe('0.10.0')
+    expect(h.getPacstall()[0]?.installedVersion).toBe('0.10.0')
+    const lastEvent = vi.mocked(h.emit).mock.calls.at(-1)?.[0] as Record<string, unknown>
+    expect(lastEvent['total']).toBe(1)
+    expect(lastEvent['completed']).toBe(1)
   })
 })
 
@@ -708,12 +1010,23 @@ describe('batchDelete', () => {
       debPackages: [trackedDeb({ id: 1 })]
     })
 
-    const summary = await h.handlers.batchDelete([[1, 99], [1]])
+    const summary = await h.handlers.batchDelete([[1, 99], [1], []])
 
     expect(summary).toEqual({ succeeded: 2, failed: 1 })
     expect(h.getApps().map((app) => app.id)).toEqual([2])
     expect(h.getDebs()).toHaveLength(0)
     expect(h.emit).toHaveBeenCalled()
+  })
+
+  it('deletes pacstall ids from the third list', async () => {
+    const h = makeHarness({
+      pacstallPackages: [trackedPacstall({ id: 1 }), trackedPacstall({ id: 2 })]
+    })
+
+    const summary = await h.handlers.batchDelete([[], [], [1, 7]])
+
+    expect(summary).toEqual({ succeeded: 1, failed: 1 })
+    expect(h.getPacstall().map((pkg) => pkg.id)).toEqual([2])
   })
 })
 
@@ -729,13 +1042,307 @@ describe('batchUpdate', () => {
     })
     vi.mocked(h.external.getExternalVersion).mockResolvedValue('1.0.0')
 
-    const results = (await h.handlers.batchUpdate([[app.toMap()], []])) as Array<
+    const results = (await h.handlers.batchUpdate([[app.toMap()], [], []])) as Array<
       Record<string, unknown>
     >
 
     expect(results[0]?.['newVersion']).toBe('v6.0.0')
     const event = vi.mocked(h.emit).mock.calls.at(-1)?.[0] as Record<string, unknown>
     expect(event['method']).toBe('batchUpdate')
+  })
+
+  it('checks a pacstall package from the third array and persists the update', async () => {
+    const pkg = trackedPacstall()
+    const h = makeHarness({ pacstallPackages: [pkg] })
+    vi.mocked(h.pacstall.checkUpdate).mockResolvedValue('0.11.0')
+
+    const results = (await h.handlers.batchUpdate([[], [], [pkg.toMap()]])) as Array<
+      Record<string, unknown>
+    >
+
+    expect(h.pacstall.checkUpdate).toHaveBeenCalledTimes(1)
+    expect(results[0]?.['appName']).toBe('neovim')
+    expect(results[0]?.['newVersion']).toBe('0.11.0')
+    expect(h.getPacstall()[0]?.latestVersion).toBe('0.11.0')
+  })
+})
+
+// --- GitHub repository search -----------------------------------------------
+
+describe('searchGithubRepositories', () => {
+  it('forwards query, page, perPage and sort to the GitHub service', async () => {
+    const h = makeHarness()
+    const result = { total_count: 0, incomplete_results: false, items: [] }
+    vi.mocked(h.github.searchRepositories).mockResolvedValue(result)
+
+    const returned = await h.handlers.searchGithubRepositories([
+      { query: 'pacstall', page: 2, perPage: 10, sort: 'stars' }
+    ])
+
+    expect(h.github.searchRepositories).toHaveBeenCalledWith('pacstall', {
+      sort: 'stars',
+      perPage: 10,
+      page: 2
+    })
+    expect(returned).toBe(result)
+  })
+
+  it("maps 'best-match' to a null sort and applies defaults", async () => {
+    const h = makeHarness()
+    vi.mocked(h.github.searchRepositories).mockResolvedValue({
+      total_count: 0,
+      incomplete_results: false,
+      items: []
+    })
+
+    await h.handlers.searchGithubRepositories([{ query: 'neovim', sort: 'best-match' }])
+
+    expect(h.github.searchRepositories).toHaveBeenCalledWith('neovim', {
+      sort: null,
+      perPage: null,
+      page: null
+    })
+  })
+
+  it('rejects a blank query', async () => {
+    const h = makeHarness()
+    await expect(h.handlers.searchGithubRepositories([{ query: '' }])).rejects.toThrow()
+    expect(h.github.searchRepositories).not.toHaveBeenCalled()
+  })
+})
+
+describe('getGithubReleaseAssets', () => {
+  it('forwards the repo and prerelease flag to the GitHub service', async () => {
+    const h = makeHarness()
+    const result = {
+      tagName: 'v1.0.0',
+      assets: [
+        {
+          name: 'app-amd64.deb',
+          size: 42,
+          downloadUrl: 'https://example.com/app-amd64.deb',
+          installType: 'deb'
+        }
+      ],
+      publishedAt: '2026-01-01T00:00:00Z'
+    }
+    vi.mocked(h.github.getGithubReleaseAssets).mockResolvedValue(result)
+
+    const returned = await h.handlers.getGithubReleaseAssets([
+      { repoOwner: 'o', repoName: 'r', includePrerelease: true }
+    ])
+
+    expect(h.github.getGithubReleaseAssets).toHaveBeenCalledWith('o', 'r', {
+      includePrerelease: true
+    })
+    expect(returned).toBe(result)
+  })
+
+  it('defaults includePrerelease to false', async () => {
+    const h = makeHarness()
+    vi.mocked(h.github.getGithubReleaseAssets).mockResolvedValue({
+      tagName: null,
+      assets: [],
+      publishedAt: null
+    })
+
+    await h.handlers.getGithubReleaseAssets([{ repoOwner: 'o', repoName: 'r' }])
+
+    expect(h.github.getGithubReleaseAssets).toHaveBeenCalledWith('o', 'r', {
+      includePrerelease: false
+    })
+  })
+
+  it('rejects a blank repo owner before calling the service', async () => {
+    const h = makeHarness()
+    await expect(
+      h.handlers.getGithubReleaseAssets([{ repoOwner: '', repoName: 'r' }])
+    ).rejects.toThrow()
+    expect(h.github.getGithubReleaseAssets).not.toHaveBeenCalled()
+  })
+})
+
+// --- Pacstall ---------------------------------------------------------------
+
+describe('pacstall read handlers', () => {
+  it('getPacstallStatus merges the settings enabled flag', async () => {
+    const h = makeHarness({ settings: { pacstall_enabled: true } })
+    vi.mocked(h.pacstall.status).mockResolvedValue({
+      installed: true,
+      version: '6.2.0',
+      path: '/usr/bin/pacstall',
+      pathUnexpected: false
+    })
+
+    const status = (await h.handlers.getPacstallStatus([])) as Record<string, unknown>
+
+    expect(status).toEqual({
+      installed: true,
+      version: '6.2.0',
+      path: '/usr/bin/pacstall',
+      pathUnexpected: false,
+      enabled: true
+    })
+  })
+
+  it('getPacstallStatus defaults enabled to false', async () => {
+    const h = makeHarness()
+    const status = (await h.handlers.getPacstallStatus([])) as Record<string, unknown>
+    expect(status['enabled']).toBe(false)
+  })
+
+  it('getPacstallIndex forwards the force flag to the registry', async () => {
+    const h = makeHarness()
+    const index = { names: ['neovim'], fetchedAt: '2026-01-01T00:00:00Z', fromCache: false }
+    vi.mocked(h.pacstallRegistry.fetchIndex).mockResolvedValue(index)
+
+    expect(await h.handlers.getPacstallIndex([{ force: true }])).toBe(index)
+    expect(h.pacstallRegistry.fetchIndex).toHaveBeenCalledWith({ force: true })
+  })
+
+  it('getPacstallIndex tolerates no arguments', async () => {
+    const h = makeHarness()
+    await h.handlers.getPacstallIndex([])
+    expect(h.pacstallRegistry.fetchIndex).toHaveBeenCalledWith({ force: false })
+  })
+
+  it('getPacstallPackageInfo looks the package up by name', async () => {
+    const h = makeHarness()
+    await h.handlers.getPacstallPackageInfo([{ name: 'neovim' }])
+    expect(h.pacstallRegistry.fetchPackageInfo).toHaveBeenCalledWith('neovim')
+  })
+
+  it('getPacstallPackages returns the tracked list as wire maps', async () => {
+    const h = makeHarness({ pacstallPackages: [trackedPacstall()] })
+    const packages = (await h.handlers.getPacstallPackages([])) as Array<Record<string, unknown>>
+    expect(packages[0]?.['name']).toBe('neovim')
+  })
+})
+
+describe('pacstall CRUD handlers', () => {
+  it('addPacstallPackage assigns the next id and uses the configured registry repo', async () => {
+    const h = makeHarness({
+      pacstallPackages: [trackedPacstall({ id: 3 })],
+      settings: { pacstall_registry_repo: 'me/mirror' }
+    })
+
+    const id = await h.handlers.addPacstallPackage([
+      { name: 'htop', displayName: 'Htop', autoUpdate: true }
+    ])
+
+    expect(id).toBe(4)
+    const added = h.getPacstall().find((pkg) => pkg.id === 4)
+    expect(added?.name).toBe('htop')
+    expect(added?.displayName).toBe('Htop')
+    expect(added?.autoUpdate).toBe(true)
+    expect(added?.registryRepo).toBe('me/mirror')
+  })
+
+  it('addPacstallPackage rejects a duplicate name', async () => {
+    const h = makeHarness({ pacstallPackages: [trackedPacstall()] })
+    await expect(h.handlers.addPacstallPackage([{ name: 'neovim' }])).rejects.toThrow(
+      /already exists/
+    )
+  })
+
+  it('installPacstallPackage installs, records the version and persists', async () => {
+    const pkg = trackedPacstall()
+    const h = makeHarness({ pacstallPackages: [pkg] })
+    vi.mocked(h.pacstall.readInstalledVersion).mockResolvedValue('0.10.0-pacstall1')
+
+    const result = (await h.handlers.installPacstallPackage([pkg.toMap()])) as Record<
+      string,
+      unknown
+    >
+
+    expect(h.pacstall.install).toHaveBeenCalledWith('neovim')
+    expect(result['installed_version']).toBe('0.10.0-pacstall1')
+    expect(h.getPacstall()[0]?.installedVersion).toBe('0.10.0-pacstall1')
+  })
+
+  it('uninstallPacstallPackage delegates to the pacstall remove verb', async () => {
+    const h = makeHarness()
+    await h.handlers.uninstallPacstallPackage([trackedPacstall().toMap()])
+    expect(h.pacstall.remove).toHaveBeenCalledWith('neovim')
+  })
+
+  it('checkPacstallUpdate returns the new version and persists it', async () => {
+    const pkg = trackedPacstall()
+    const h = makeHarness({ pacstallPackages: [pkg] })
+    vi.mocked(h.pacstall.checkUpdate).mockResolvedValue('0.11.0')
+
+    const version = await h.handlers.checkPacstallUpdate([pkg.toMap()])
+
+    expect(version).toBe('0.11.0')
+    expect(h.getPacstall()[0]?.latestVersion).toBe('0.11.0')
+  })
+
+  it('updatePacstallPackage upgrades and refreshes the installed version', async () => {
+    const pkg = trackedPacstall()
+    const h = makeHarness({ pacstallPackages: [pkg] })
+    vi.mocked(h.pacstall.readInstalledVersion).mockResolvedValue('0.11.0')
+
+    await h.handlers.updatePacstallPackage([pkg.toMap()])
+
+    expect(h.pacstall.upgrade).toHaveBeenCalledWith('neovim')
+    expect(h.getPacstall()[0]?.installedVersion).toBe('0.11.0')
+  })
+
+  it('deletePacstallPackage removes the matching record', async () => {
+    const h = makeHarness({
+      pacstallPackages: [trackedPacstall({ id: 1 }), trackedPacstall({ id: 2 })]
+    })
+    await h.handlers.deletePacstallPackage([1])
+    expect(h.getPacstall().map((pkg) => pkg.id)).toEqual([2])
+  })
+
+  it('launchPacstall delegates to the pacstall launcher', async () => {
+    const h = makeHarness()
+    await h.handlers.launchPacstall([trackedPacstall().toMap()])
+    expect(h.pacstall.launch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('checkPacstallAllUpdates', () => {
+  it('sweeps every pacstall package and returns the refreshed list', async () => {
+    const h = makeHarness({
+      pacstallPackages: [trackedPacstall({ id: 1 }), trackedPacstall({ id: 2, name: 'htop' })]
+    })
+    vi.mocked(h.pacstall.checkUpdate).mockResolvedValue('0.12.0')
+
+    const result = (await h.handlers.checkPacstallAllUpdates([])) as {
+      packages: Array<Record<string, unknown>>
+      failures: Array<{ name: string; error: string }>
+    }
+
+    expect(h.pacstall.checkUpdate).toHaveBeenCalledTimes(2)
+    expect(result.packages).toHaveLength(2)
+    expect(result.failures).toEqual([])
+  })
+
+  it('collects failures without aborting', async () => {
+    const h = makeHarness({ pacstallPackages: [trackedPacstall({ displayName: 'Broken' })] })
+    vi.mocked(h.pacstall.checkUpdate).mockRejectedValue(new Error('offline'))
+
+    const result = (await h.handlers.checkPacstallAllUpdates([])) as {
+      failures: Array<{ name: string; error: string }>
+    }
+
+    expect(result.failures).toEqual([{ name: 'Broken', error: 'offline' }])
+  })
+})
+
+describe('settings defaults', () => {
+  it('applies documented defaults under persisted values', async () => {
+    const h = makeHarness({ settings: { theme: 'dark', github_search_per_page: 50 } })
+
+    const settings = (await h.handlers.getSettings([])) as Record<string, unknown>
+
+    expect(settings['theme']).toBe('dark')
+    expect(settings['github_search_per_page']).toBe(50)
+    expect(settings['pacstall_registry_repo']).toBe(SETTINGS_DEFAULTS['pacstall_registry_repo'])
+    expect(settings['pacstall_enabled']).toBe(false)
+    expect(settings['github_search_sort']).toBe('best-match')
   })
 })
 

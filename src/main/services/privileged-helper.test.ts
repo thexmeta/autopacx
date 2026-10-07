@@ -185,9 +185,71 @@ describe('validateHelperInvocation — backup / cleanup', () => {
   })
 })
 
+describe('validateHelperInvocation — binary-remove', () => {
+  it('accepts a path inside an install directory', () => {
+    expect(validateHelperInvocation('binary-remove', ['/usr/local/bin/tool'], policy)).toBeNull()
+    expect(validateHelperInvocation('binary-remove', ['/usr/bin/tool'], policy)).toBeNull()
+    expect(
+      validateHelperInvocation('binary-remove', ['/home/u/.local/bin/tool'], policy)
+    ).toBeNull()
+  })
+
+  it('rejects a path outside the install directories', () => {
+    expect(validateHelperInvocation('binary-remove', ['/tmp/tool'], policy)).toContain(
+      'outside the allowed install'
+    )
+    expect(validateHelperInvocation('binary-remove', [`${STAGING}/tool`], policy)).toContain(
+      'outside the allowed install'
+    )
+  })
+
+  it('rejects a relative path and a wrong argument count', () => {
+    expect(validateHelperInvocation('binary-remove', ['tool'], policy)).toContain('absolute')
+    expect(validateHelperInvocation('binary-remove', [], policy)).toContain('exactly one')
+    expect(validateHelperInvocation('binary-remove', ['/a', '/b'], policy)).toContain('exactly one')
+  })
+})
+
+describe('validateHelperInvocation — pacstall verbs', () => {
+  it('accepts a plain pacscript name for install/remove/upgrade', () => {
+    for (const verb of ['pacstall-install', 'pacstall-remove', 'pacstall-upgrade'] as const) {
+      for (const name of ['neovim', 'nodejs', 'foo-bar', 'a.b_c']) {
+        expect(validateHelperInvocation(verb, [name], policy), `${verb} ${name}`).toBeNull()
+      }
+    }
+  })
+
+  it('rejects an invalid pacscript name', () => {
+    for (const verb of ['pacstall-install', 'pacstall-remove', 'pacstall-upgrade'] as const) {
+      for (const name of ['', '-r', '/etc/passwd', 'a b', 'a;rm -rf /', '../x']) {
+        expect(validateHelperInvocation(verb, [name], policy), `${verb} ${name}`).toContain(
+          'invalid package name'
+        )
+      }
+    }
+  })
+
+  it('requires exactly one name for install/remove/upgrade', () => {
+    for (const verb of ['pacstall-install', 'pacstall-remove', 'pacstall-upgrade'] as const) {
+      expect(validateHelperInvocation(verb, [], policy), verb).toContain('exactly one')
+      expect(validateHelperInvocation(verb, ['a', 'b'], policy), verb).toContain('exactly one')
+    }
+  })
+
+  it('accepts no arguments for pacstall-upgrade-all', () => {
+    expect(validateHelperInvocation('pacstall-upgrade-all', [], policy)).toBeNull()
+  })
+
+  it('rejects any argument for pacstall-upgrade-all', () => {
+    expect(validateHelperInvocation('pacstall-upgrade-all', ['neovim'], policy)).toContain(
+      'takes no arguments'
+    )
+  })
+})
+
 describe('validateHelperInvocation — unknown verb', () => {
   it('rejects anything that is not a known verb', () => {
-    for (const verb of ['sh', 'cp', 'rm', 'apt-get', '', 'APT-INSTALL']) {
+    for (const verb of ['sh', 'cp', 'rm', 'apt-get', '', 'APT-INSTALL', 'pacstall-unknown']) {
       expect(validateHelperInvocation(verb, [], policy), verb).toContain('Unknown privileged')
     }
   })

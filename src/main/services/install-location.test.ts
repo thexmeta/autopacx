@@ -16,7 +16,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TrackedApp } from '@core/models/tracked-app'
-import { InstallLocationResolver } from './install-location'
+import { InstallLocationResolver, suggestInstallTargets } from './install-location'
 
 /**
  * Ported from `test/services/install_location_test.dart` (9 tests).
@@ -211,4 +211,115 @@ describe('InstallLocationResolver', () => {
 
     expect(await InstallLocationResolver.isDirWritable(readOnly)).toBe(false)
   })
+})
+
+describe('suggestInstallTargets', () => {
+  let tmp: string
+
+  beforeEach(async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'autonex-targets-test-'))
+  })
+
+  afterEach(async () => {
+    try {
+      await chmodRecursive(tmp, 0o755)
+    } catch {
+      // Best effort: a chmod failure must not mask the test result.
+    }
+    try {
+      await rm(tmp, { recursive: true, force: true })
+    } catch {
+      // Best effort cleanup.
+    }
+  })
+
+  it('enumerates PATH dirs plus the well-known directories, deduped', async () => {
+    const binDir = join(tmp, 'bin')
+    const home = join(tmp, 'home')
+    const localBin = join(home, '.local', 'bin')
+    await mkdir(binDir, { recursive: true })
+    await mkdir(localBin, { recursive: true })
+
+    const targets = await suggestInstallTargets(app({ repoName: 'myrepo' }), {
+      pathDirs: [binDir, localBin],
+      home
+    })
+
+    const paths = targets.map((target) => target.path)
+    expect(paths).toContain(binDir)
+    expect(paths).toContain(localBin)
+    expect(paths).toContain('/usr/local/bin')
+    // `~/.local/bin` is both a PATH entry and a well-known dir: it must appear
+    // exactly once after dedupe.
+    expect(paths.filter((entry) => entry === localBin)).toHaveLength(1)
+  }, 15_000)
+
+  it('includes the app-specific /opt/<name>/bin directory', async () => {
+    const targets = await suggestInstallTargets(app({ repoName: 'myrepo' }), {
+      pathDirs: [join(tmp, 'bin')],
+      home: join(tmp, 'home')
+    })
+
+    expect(targets.map((target) => target.path)).toContain('/opt/myrepo/bin')
+  }, 15_000)
+
+  it('marks onPath for a PATH entry and reports its writability', async () => {
+    const binDir = join(tmp, 'bin')
+    await mkdir(binDir, { recursive: true })
+
+    const targets = await suggestInstallTargets(app({ repoName: 'myrepo' }), {
+      pathDirs: [binDir],
+      home: join(tmp, 'home')
+    })
+
+    const entry = targets.find((target) => target.path === binDir)
+    expect(entry).toBeDefined()
+    expect(entry?.onPath).toBe(true)
+    expect(entry?.writable).toBe(true)
+    expect(entry?.ownedByPackage).toBe(false)
+  }, 15_000)
+
+  it('reports writable == false for a read-only directory', async () => {
+    const readOnly = join(tmp, 'ro')
+    await mkdir(readOnly)
+    await chmod(readOnly, 0o555)
+
+    const targets = await suggestInstallTargets(app({ repoName: 'myrepo' }), {
+      pathDirs: [readOnly],
+      home: join(tmp, 'home')
+    })
+
+    expect(targets.find((target) => target.path === readOnly)?.writable).toBe(false)
+  }, 15_000)
+
+  it('recommends a writable ~/.local/bin over the other candidates', async () => {
+    const home = join(tmp, 'home')
+    const localBin = join(home, '.local', 'bin')
+    await mkdir(localBin, { recursive: true })
+
+    const targets = await suggestInstallTargets(app({ repoName: 'myrepo' }), {
+      pathDirs: [join(tmp, 'bin')],
+      home
+    })
+
+    const recommended = targets.filter((target) => target.recommended)
+    expect(recommended).toHaveLength(1)
+    expect(recommended[0].path).toBe(localBin)
+  }, 15_000)
+
+  it('never recommends a non-writable candidate', async () => {
+    const home = join(tmp, 'home')
+    const localBin = join(home, '.local', 'bin')
+    await mkdir(localBin, { recursive: true })
+    await chmod(localBin, 0o555)
+
+    const targets = await suggestInstallTargets(app({ repoName: 'myrepo' }), {
+      pathDirs: [join(tmp, 'bin')],
+      home
+    })
+
+    const recommended = targets.filter((target) => target.recommended)
+    expect(recommended.every((target) => target.writable)).toBe(true)
+    expect(recommended.some((target) => target.path === localBin)).toBe(false)
+  }, 15_000)
 })

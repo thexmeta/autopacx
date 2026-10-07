@@ -2,12 +2,24 @@
 // Copyright (c) 2024 PlebOne
 
 import type { DebugLogResult, Settings } from '@core/api'
+import type { RepoSearchResult } from '@core/github/repo-search'
 import type { InstallType } from '@core/models/install-type'
+import type { Release } from '@core/models/release'
 import type { TrackedApp } from '@core/models/tracked-app'
 import type { TrackedDebPackage } from '@core/models/tracked-deb-package'
+import type { TrackedPacstallPackage } from '@core/models/tracked-pacstall-package'
+import type { PacstallPackageInfo } from '@core/pacstall/srcinfo'
 import type { DebRemoteInfo } from './database-service'
-import type { GetLatestReleaseOptions, ReleasePackageInfo } from './github-service'
+import type {
+  GetLatestReleaseOptions,
+  GithubReleaseAssets,
+  ReleasePackageInfo,
+  SearchRepositoriesOptions
+} from './github-service'
+import type { InstallTargetSuggestion } from './install-location'
 import type { InstallPackageOptions, InstallResult } from './installer-service'
+import type { PacstallIndexResult } from './pacstall-registry'
+import type { PacstallStatus } from './pacstall-service'
 
 /**
  * Narrow structural views of the concrete services, defined here so the
@@ -17,11 +29,47 @@ import type { InstallPackageOptions, InstallResult } from './installer-service'
 
 /** Narrow view of `GitHubService`. */
 export interface GitHubLike {
+  getLatestRelease(
+    owner: string,
+    repo: string,
+    options?: GetLatestReleaseOptions
+  ): Promise<Release | null>
   getLatestReleaseWithPackageInfo(
     owner: string,
     repo: string,
     options?: GetLatestReleaseOptions
   ): Promise<ReleasePackageInfo | null>
+  getGithubReleaseAssets(
+    owner: string,
+    repo: string,
+    options?: {
+      readonly includePrerelease?: boolean
+      readonly assetFilterPattern?: string
+      readonly tagPrefix?: string
+      readonly architectures?: readonly string[]
+    }
+  ): Promise<GithubReleaseAssets>
+  searchRepositories(query: string, options?: SearchRepositoriesOptions): Promise<RepoSearchResult>
+}
+
+/** Narrow view of `PacstallService`. */
+export interface PacstallLike {
+  status(): Promise<PacstallStatus>
+  install(name: string): Promise<void>
+  remove(name: string): Promise<void>
+  upgrade(name: string): Promise<void>
+  upgradeAll(): Promise<void>
+  checkUpdate(pkg: TrackedPacstallPackage): Promise<string | null>
+  /** The version recorded in pacstall's metadata, or the literal `"unknown"`. */
+  readInstalledVersion(name: string): Promise<string>
+  /** Launches the package's launch command (or its name) detached. */
+  launch(pkg: TrackedPacstallPackage): Promise<void>
+}
+
+/** Narrow view of `PacstallRegistry` used for index/metadata lookups. */
+export interface PacstallRegistryPort {
+  fetchIndex(options?: { readonly force?: boolean }): Promise<PacstallIndexResult>
+  fetchPackageInfo(name: string): Promise<PacstallPackageInfo>
 }
 
 /** Narrow view of `InstallerService`. */
@@ -59,6 +107,8 @@ export interface TrackedStoreLike {
   writeApps(apps: readonly TrackedApp[]): Promise<void>
   readDebPackages(): Promise<TrackedDebPackage[]>
   writeDebPackages(packages: readonly TrackedDebPackage[]): Promise<void>
+  readPacstallPackages(): Promise<TrackedPacstallPackage[]>
+  writePacstallPackages(packages: readonly TrackedPacstallPackage[]): Promise<void>
 }
 
 /** Narrow view of `JsonStore`: tracked items plus settings. */
@@ -89,4 +139,9 @@ export interface DebugLogLike {
 /** Opens an external URL in the user's browser after validation. */
 export interface ExternalLinkLike {
   open(url: string): Promise<void>
+}
+
+/** Narrow view of the install-target suggester (`install-location.ts`). */
+export interface InstallLocationLike {
+  suggestTargets(app: TrackedApp): Promise<InstallTargetSuggestion[]>
 }

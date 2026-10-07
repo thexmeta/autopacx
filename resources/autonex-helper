@@ -41,6 +41,11 @@ caller_uid="${PKEXEC_UID:-0}"
 caller_home="$(/usr/bin/getent passwd "$caller_uid" 2>/dev/null | /usr/bin/cut -d: -f6)" || true
 [ -n "$caller_home" ] || caller_home="/root"
 
+# The caller's login name is needed by pacstall, which operates on the invoking
+# user's cache/config even though it runs as root here.
+caller_user="$(/usr/bin/getent passwd "$caller_uid" 2>/dev/null | /usr/bin/cut -d: -f1)" || true
+[ -n "$caller_user" ] || caller_user="root"
+
 # Canonicalise a path, falling back to the literal value when the path (or its
 # parent) does not exist yet — which is the normal case for a destination that
 # is about to be created.
@@ -80,6 +85,17 @@ valid_package() {
         '' | [!A-Za-z0-9]* | *[!A-Za-z0-9+._-]*) return 1 ;;
         *) return 0 ;;
     esac
+}
+
+# Run pacstall as root. Because this helper already runs as root (EUID 0),
+# pacstall's elevate() is a no-op, so the apt/bwrap commands it shells out to do
+# not try to sudo again. PACSTALL_USER / SUDO_USER tell pacstall which user's
+# cache and config to operate on. `-P` disables prompts; `-Ns` is NEVER passed.
+# The binary path is hardcoded so PATH can never redirect it.
+run_pacstall() {
+    PACSTALL_USER="$caller_user" SUDO_USER="$caller_user" \
+    DISABLE_PROMPTS=yes DEBIAN_FRONTEND=noninteractive NO_COLOR=1 \
+    exec /usr/bin/pacstall "$@" -P
 }
 
 APP_DATA="$caller_home/.local/share/autonex"
@@ -129,12 +145,42 @@ atomic-install)
     /usr/bin/install -m 755 -- "$src" "$dest.autonex-new" && /usr/bin/mv -f -- "$dest.autonex-new" "$dest"
     ;;
 
+pacstall-install)
+    [ "$#" -eq 1 ] || fail "pacstall-install expects exactly one package name"
+    valid_package "$1" || fail "invalid package name"
+    run_pacstall -I "$1"
+    ;;
+
+pacstall-remove)
+    [ "$#" -eq 1 ] || fail "pacstall-remove expects exactly one package name"
+    valid_package "$1" || fail "invalid package name"
+    run_pacstall -R "$1"
+    ;;
+
+pacstall-upgrade)
+    [ "$#" -eq 1 ] || fail "pacstall-upgrade expects exactly one package name"
+    valid_package "$1" || fail "invalid package name"
+    run_pacstall -U "$1"
+    ;;
+
+pacstall-upgrade-all)
+    [ "$#" -eq 0 ] || fail "pacstall-upgrade-all takes no arguments"
+    run_pacstall -Up
+    ;;
+
 backup)
     [ "$#" -eq 1 ] || fail "backup expects exactly one path"
     p="$(canon "$1")"
     under_any "$p" $INSTALL_ROOTS || fail "backup path is outside the allowed install directories"
     [ -f "$p" ] || exit 0
     /usr/bin/cp -p -- "$p" "$p.bak"
+    ;;
+
+binary-remove)
+    [ "$#" -eq 1 ] || fail "binary-remove expects exactly one path"
+    p="$(canon "$1")"
+    under_any "$p" $INSTALL_ROOTS || fail "binary-remove path is outside the allowed install directories"
+    /usr/bin/rm -f -- "$p"
     ;;
 
 cleanup)

@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { TrackedApp } from '@core/models/tracked-app'
 import { TrackedDebPackage } from '@core/models/tracked-deb-package'
+import { TrackedPacstallPackage } from '@core/models/tracked-pacstall-package'
 import type { TrackedStoreLike } from './ports'
 import { TrackedRepository } from './tracked-repository'
 
@@ -26,13 +27,30 @@ function deb(id: number): TrackedDebPackage {
   })
 }
 
-function makeStore(init: { apps?: TrackedApp[]; debs?: TrackedDebPackage[] } = {}): {
+function pacstall(id: number, name = `pkg-${id}`): TrackedPacstallPackage {
+  return new TrackedPacstallPackage({
+    id,
+    name,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    registryRepo: 'pacstall/pacstall-programs'
+  })
+}
+
+function makeStore(
+  init: {
+    apps?: TrackedApp[]
+    debs?: TrackedDebPackage[]
+    pacstall?: TrackedPacstallPackage[]
+  } = {}
+): {
   store: TrackedStoreLike
   apps: () => TrackedApp[]
   debs: () => TrackedDebPackage[]
+  pacstall: () => TrackedPacstallPackage[]
 } {
   let apps = [...(init.apps ?? [])]
   let debs = [...(init.debs ?? [])]
+  let pacstall = [...(init.pacstall ?? [])]
   return {
     store: {
       readApps: async () => [...apps],
@@ -42,10 +60,15 @@ function makeStore(init: { apps?: TrackedApp[]; debs?: TrackedDebPackage[] } = {
       readDebPackages: async () => [...debs],
       writeDebPackages: async (next) => {
         debs = [...next]
+      },
+      readPacstallPackages: async () => [...pacstall],
+      writePacstallPackages: async (next) => {
+        pacstall = [...next]
       }
     },
     apps: () => apps,
-    debs: () => debs
+    debs: () => debs,
+    pacstall: () => pacstall
   }
 }
 
@@ -116,5 +139,35 @@ describe('TrackedRepository debs', () => {
     const harness = makeStore()
     const repo = new TrackedRepository(harness.store)
     await expect(repo.updateDeb(deb(9))).rejects.toThrow(/not found/)
+  })
+})
+
+describe('TrackedRepository pacstall packages', () => {
+  it('appends with the next free id, updates and deletes', async () => {
+    const harness = makeStore({ pacstall: [pacstall(2)] })
+    const repo = new TrackedRepository(harness.store)
+
+    const id = await repo.appendPacstallPackage(pacstall(0))
+    expect(id).toBe(3)
+
+    await repo.updatePacstallPackage(pacstall(3, 'renamed'))
+    expect(harness.pacstall().find((entry) => entry.id === 3)?.name).toBe('renamed')
+
+    const removed = await repo.deletePacstallPackages([2, 3])
+    expect(removed).toBe(2)
+    expect(harness.pacstall()).toHaveLength(0)
+  })
+
+  it('rejects an update without an id or for a missing package', async () => {
+    const harness = makeStore()
+    const repo = new TrackedRepository(harness.store)
+
+    const noId = new TrackedPacstallPackage({
+      name: 'x',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      registryRepo: 'pacstall/pacstall-programs'
+    })
+    await expect(repo.updatePacstallPackage(noId)).rejects.toThrow(/without an id/)
+    await expect(repo.updatePacstallPackage(pacstall(9))).rejects.toThrow(/not found/)
   })
 })

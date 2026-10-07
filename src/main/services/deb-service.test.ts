@@ -27,7 +27,9 @@ function makeService(init: { debs?: TrackedDebPackage[] } = {}) {
     readDebPackages: async () => [...debs],
     writeDebPackages: async (next) => {
       debs = [...next]
-    }
+    },
+    readPacstallPackages: async () => [],
+    writePacstallPackages: async () => undefined
   }
   const database: DatabaseLike = { fetchDebInfo: vi.fn() }
   const installer: InstallerLike = {
