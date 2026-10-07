@@ -1,7 +1,5 @@
 # AutoNex
 
-Inspired and enhanced from autonomix — https://github.com/thexmeta/autonomix
-
 ## Screenshots
 
 ![Tracked apps in the dark theme](screenshots/01-apps-dark.png)
@@ -109,9 +107,3 @@ pnpm install
 ## License
 
 MIT © 2024 PlebOne. See [LICENSE](./LICENSE).
-
-## Notice
-
-AutoNex is inspired and enhanced from
-[autonomix](https://github.com/thexmeta/autonomix). The MIT license and the
-original copyright notice are retained; see [LICENSE](./LICENSE).
